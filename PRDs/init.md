@@ -125,3 +125,106 @@ tools = toolkit.get_tool_declarations()
 
 The framework is ready for integration with Gemini-2.5-flash-thinking or any LLM that supports function calling.
 
+
+### Task 3
+Implement a reasoning agent that uses the workflow input schema and playwright toolkit to autonomously generate test scripts. The agent should execute the workflow in a live browser, observe behavior, and codify it into a reliable test script.
+
+#### Solution
+Created complete LangGraph-based agent with Vertex AI Gemini integration in multiple files:
+
+**Core Agent Files:**
+- **`src/agent.py`**: Main `WorkflowAgent` class using LangGraph StateGraph
+- **`src/agent_nodes.py`**: Node functions (parse_workflow, agent reasoning, tool execution, routing logic)
+- **`src/agent_state.py`**: State management with `AgentState` and `AgentOutput` models
+- **`src/config.py`**: Configuration (GCP settings, model parameters, comprehensive system prompt)
+- **`src/README_AGENT.md`**: Complete usage documentation and troubleshooting guide
+
+**Architecture:**
+```
+Parse Workflow → Agent (Gemini) ⟷ Execute Tools (Playwright) → END
+```
+
+**Agent Capabilities:**
+- Parses and validates WorkflowInput using Pydantic
+- Executes workflow actions in live browser
+- Observes actual page behavior
+- Generates complete test scripts using toolkit's script management tools
+- Adds assertions based on expected outcomes
+- Includes error handling and cleanup
+- Tracks metrics (actions executed, assertions added, execution time)
+
+**LangGraph Integration:**
+- StateGraph with nodes: parse, agent (reasoning), execute_tools
+- Conditional routing based on tool calls and execution state
+- Messages-based state management (extends MessagesState)
+- Support for checkpointing and streaming (optional)
+
+**Vertex AI Gemini Setup:**
+- Uses `ChatVertexAI` from `langchain-google-vertexai`
+- Model: `gemini-2.0-flash-001` (configurable to 2.5-flash-thinking)
+- Temperature: 0.3 for deterministic output
+- Tool binding: All 12 Playwright toolkit functions
+- Configurable via environment variables or `config.py`
+
+**Dependencies Added:**
+```bash
+uv add langchain-google-vertexai langgraph langchain-core
+```
+
+**Usage Pattern:**
+```python
+import asyncio
+from src.agent import WorkflowAgent
+from src.playwright_framework import PlaywrightToolkit
+from src.workflow_schema import WorkflowInput
+
+async def main():
+    # Load and validate workflow
+    workflow = WorkflowInput.model_validate(workflow_data)
+    
+    # Initialize browser toolkit
+    toolkit = PlaywrightToolkit(headless=False)
+    await toolkit.initialize()
+    
+    try:
+        # Create agent
+        agent = WorkflowAgent(
+            toolkit=toolkit,
+            model_name="gemini-2.0-flash-001",
+            project_id="YOUR_PROJECT_ID"
+        )
+        
+        # Generate test script
+        result = await agent.generate_test_script(
+            workflow=workflow,
+            output_path="tests/test_output.py"
+        )
+        
+        if result.success:
+            print(f"✅ Generated: {result.file_path}")
+            print(f"   Actions: {result.actions_count}")
+            print(f"   Assertions: {result.assertions_count}")
+        else:
+            print(f"❌ Error: {result.error}")
+            
+    finally:
+        await toolkit.cleanup()
+
+asyncio.run(main())
+```
+
+**Key Features:**
+- Autonomous decision making via LLM reasoning
+- Live browser execution with observation
+- Simultaneous execution and codification
+- Error recovery and retry logic
+- Comprehensive state tracking
+- Production-ready output with metrics
+
+**Setup Requirements:**
+1. Google Cloud project with Vertex AI enabled
+2. Application Default Credentials configured
+3. Environment variables: `GCP_PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`
+
+See `PRDs/agent_implementation.md` for complete implementation details and `src/README_AGENT.md` for usage guide.
+

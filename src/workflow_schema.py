@@ -35,7 +35,7 @@ class WorkflowAction(BaseModel):
         ..., description="Type of action performed"
     )
     description: str = Field(..., description="Human-readable description of the step")
-    screenshot_url: str = Field(..., description="URL or path to screenshot taken at this step")
+    screenshot_url: Optional[str] = Field(None, description="URL or path to screenshot taken at this step")
     
     # Action-specific details
     target_url: Optional[str] = Field(None, description="For navigation actions")
@@ -116,7 +116,6 @@ EXAMPLE_WORKFLOW = {
             "timestamp": "2025-10-10T22:38:05+05:30",
             "action_type": "click",
             "description": "Click on 'Sign In' button",
-            "screenshot_url": "screenshots/step_001.png",
             "dom_element": {
                 "selector": "button.sign-in",
                 "tag_name": "button",
@@ -129,7 +128,6 @@ EXAMPLE_WORKFLOW = {
             "timestamp": "2025-10-10T22:38:07+05:30",
             "action_type": "type",
             "description": "Enter username in email field",
-            "screenshot_url": "screenshots/step_002.png",
             "input_text": "user@example.com",
             "dom_element": {
                 "selector": "input[name='email']",
@@ -141,7 +139,6 @@ EXAMPLE_WORKFLOW = {
             "timestamp": "2025-10-10T22:38:10+05:30",
             "action_type": "type",
             "description": "Enter password",
-            "screenshot_url": "screenshots/step_003.png",
             "input_text": "********",  # Actual password should be securely handled
             "dom_element": {
                 "selector": "input[name='password']",
@@ -153,7 +150,6 @@ EXAMPLE_WORKFLOW = {
             "timestamp": "2025-10-10T22:38:12+05:30",
             "action_type": "click",
             "description": "Click submit button",
-            "screenshot_url": "screenshots/step_004.png",
             "dom_element": {
                 "selector": "button[type='submit']",
                 "tag_name": "button",

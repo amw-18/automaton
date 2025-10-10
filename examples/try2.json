@@ -1,0 +1,81 @@
+{
+    "metadata": {
+      "name": "Wikipedia to Amazon Book Search",
+      "description": "Search for Hitchhiker's Guide to the Galaxy on Wikipedia, then search for the book on Amazon India and click the first result",
+      "created_at": "2025-10-11T11:15:00Z",
+      "browser": "chromium",
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    "starting_url": "https://www.wikipedia.org",
+    "actions": [
+      {
+        "timestamp": "2025-10-11T11:15:00Z",
+        "action_type": "navigate",
+        "description": "Navigate to Wikipedia homepage",
+        "target_url": "https://www.wikipedia.org",
+        "expected_outcome": "Wikipedia homepage loads successfully"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:02Z",
+        "action_type": "click",
+        "description": "Click on the Wikipedia search input field"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:03Z",
+        "action_type": "type",
+        "description": "Type 'hitchhiker's guide to the galaxy' into the search box",
+        "input_text": "hitchhiker's guide to the galaxy",
+        "expected_outcome": "Search query appears in the search box with autocomplete suggestions"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:04Z",
+        "action_type": "click",
+        "description": "Click the search button or press Enter to search",
+        "expected_outcome": "Wikipedia article page for Hitchhiker's Guide to the Galaxy loads"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:06Z",
+        "action_type": "scroll",
+        "description": "Scroll down to read the article content",
+        "scroll_position": {
+          "x": 0,
+          "y": 800
+        }
+      },
+      {
+        "timestamp": "2025-10-11T11:15:10Z",
+        "action_type": "navigate",
+        "description": "Navigate to Amazon India",
+        "target_url": "https://www.amazon.in",
+        "expected_outcome": "Amazon India homepage loads"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:12Z",
+        "action_type": "click",
+        "description": "Click on the Amazon search bar"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:13Z",
+        "action_type": "type",
+        "description": "Type 'hitchhiker's guide to the galaxy' into the Amazon search box",
+        "input_text": "hitchhiker's guide to the galaxy",
+        "expected_outcome": "Search query appears in the search box"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:14Z",
+        "action_type": "click",
+        "description": "Click the search button to search for the book",
+        "expected_outcome": "Amazon search results page loads with book listings"
+      },
+      {
+        "timestamp": "2025-10-11T11:15:16Z",
+        "action_type": "click",
+        "description": "Click on the first book result in the search results",
+        "expected_outcome": "Product detail page for the book loads"
+      }
+    ],
+    "expected_final_state": "User is viewing the product detail page for Hitchhiker's Guide to the Galaxy on Amazon India"
+  }
