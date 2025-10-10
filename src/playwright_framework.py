@@ -189,6 +189,14 @@ class PlaywrightToolkit:
             handler=self._is_visible
         ))
         
+        # Get page state tool
+        self.register_tool(Tool(
+            name="get_page_state",
+            description="Get comprehensive information about the current page state including URL, title, and visible elements",
+            parameters=[],
+            handler=self._get_page_state
+        ))
+        
         # Test script tools - similar to file editing tools
         self.register_tool(Tool(
             name="read_test_script",
@@ -296,15 +304,34 @@ class PlaywrightToolkit:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
         
         await self.page.goto(url, wait_until=wait_until)
-        return f"Navigated to {url}"
+        
+        # Get page context for LLM
+        current_url = self.page.url
+        title = await self.page.title()
+        
+        return f"Navigated to {url}\nCurrent URL: {current_url}\nPage Title: {title}"
     
     async def _click_element(self, selector: str, timeout: int = 30000, force: bool = False) -> str:
         """Click an element."""
         if not self.page:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
         
+        # Get element text before clicking (if available)
+        element_text = ""
+        try:
+            element = await self.page.query_selector(selector)
+            if element:
+                element_text = await element.text_content()
+                element_text = f" (text: '{element_text.strip()[:50]}')" if element_text and element_text.strip() else ""
+        except:
+            pass
+        
         await self.page.click(selector, timeout=timeout, force=force)
-        return f"Clicked element: {selector}"
+        
+        # Get page context after click
+        current_url = self.page.url
+        
+        return f"Clicked element: {selector}{element_text}\nCurrent URL after click: {current_url}"
     
     async def _type_text(self, selector: str, text: str, clear_first: bool = True, delay: int = 0) -> str:
         """Type text into an element."""
@@ -316,7 +343,16 @@ class PlaywrightToolkit:
         else:
             await self.page.type(selector, text, delay=delay)
         
-        return f"Typed text into {selector}"
+        # Verify what was actually typed
+        try:
+            element = await self.page.query_selector(selector)
+            if element:
+                actual_value = await element.input_value()
+                return f"Typed '{text}' into {selector}\nActual value in field: '{actual_value}'"
+        except:
+            pass
+        
+        return f"Typed '{text}' into {selector}"
     
     async def _select_option(self, selector: str, value: str) -> str:
         """Select an option from dropdown."""
@@ -324,6 +360,16 @@ class PlaywrightToolkit:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
         
         await self.page.select_option(selector, value)
+        
+        # Verify what was actually selected
+        try:
+            selected_value = await self.page.evaluate(f"""
+                document.querySelector('{selector}').value
+            """)
+            return f"Selected option '{value}' in {selector}\nCurrent selected value: '{selected_value}'"
+        except:
+            pass
+        
         return f"Selected option '{value}' in {selector}"
     
     async def _wait_for_selector(self, selector: str, timeout: int = 30000, state: str = "visible") -> str:
@@ -332,7 +378,20 @@ class PlaywrightToolkit:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
         
         await self.page.wait_for_selector(selector, timeout=timeout, state=state)
-        return f"Element {selector} is {state}"
+        
+        # Get element details if visible
+        element_info = ""
+        if state == "visible":
+            try:
+                element = await self.page.query_selector(selector)
+                if element:
+                    text = await element.text_content()
+                    if text and text.strip():
+                        element_info = f"\nElement text: '{text.strip()[:100]}'"
+            except:
+                pass
+        
+        return f"Element {selector} is {state}{element_info}"
     
     async def _take_screenshot(self, path: str, selector: Optional[str] = None, full_page: bool = False) -> str:
         """Take a screenshot."""
@@ -364,6 +423,44 @@ class PlaywrightToolkit:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
         
         return await self.page.is_visible(selector)
+    
+    async def _get_page_state(self) -> str:
+        """Get comprehensive page state information."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        try:
+            url = self.page.url
+            title = await self.page.title()
+            
+            # Get some key page elements for context
+            page_info = f"""Page State:
+URL: {url}
+Title: {title}
+
+Key Elements Present:
+"""
+            
+            # Check for common interactive elements
+            common_selectors = {
+                "input fields": "input[type='text'], input[type='search'], input[type='email'], textarea",
+                "buttons": "button, input[type='submit']",
+                "links": "a[href]",
+                "forms": "form"
+            }
+            
+            for element_type, selector in common_selectors.items():
+                try:
+                    count = await self.page.locator(selector).count()
+                    if count > 0:
+                        page_info += f"- {count} {element_type}\n"
+                except:
+                    pass
+            
+            return page_info.strip()
+            
+        except Exception as e:
+            return f"Error getting page state: {str(e)}"
     
     # Test script editing tools
     
