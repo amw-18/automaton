@@ -1,0 +1,129 @@
+{
+  "metadata": {
+    "name": "E-commerce Checkout Flow",
+    "description": "Tests the complete product purchase workflow",
+    "created_at": "2025-10-10T22:57:00+05:30",
+    "browser": "chromium",
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "tags": ["checkout", "payment", "critical-path"]
+  },
+  "starting_url": "https://example-store.com",
+  "actions": [
+    {
+      "timestamp": "2025-10-10T22:57:05+05:30",
+      "action_type": "navigate",
+      "description": "Navigate to product page",
+      "screenshot_url": "screenshots/step_001.png",
+      "target_url": "https://example-store.com/products/widget",
+      "expected_outcome": "Product page loads successfully"
+    },
+    {
+      "timestamp": "2025-10-10T22:57:10+05:30",
+      "action_type": "click",
+      "description": "Click 'Add to Cart' button",
+      "screenshot_url": "screenshots/step_002.png",
+      "dom_element": {
+        "selector": "button[data-testid='add-to-cart']",
+        "tag_name": "button",
+        "text_content": "Add to Cart",
+        "attributes": {
+          "class": "btn btn-primary add-to-cart",
+          "data-testid": "add-to-cart"
+        }
+      },
+      "expected_outcome": "Item added to cart notification appears"
+    },
+    {
+      "timestamp": "2025-10-10T22:57:12+05:30",
+      "action_type": "wait",
+      "description": "Wait for cart icon to update",
+      "screenshot_url": "screenshots/step_003.png",
+      "wait_for": ".cart-count",
+      "expected_outcome": "Cart count shows 1 item"
+    },
+    {
+      "timestamp": "2025-10-10T22:57:15+05:30",
+      "action_type": "click",
+      "description": "Click cart icon",
+      "screenshot_url": "screenshots/step_004.png",
+      "dom_element": {
+        "selector": ".cart-icon",
+        "tag_name": "a",
+        "attributes": {
+          "href": "/cart"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-10-10T22:57:18+05:30",
+      "action_type": "click",
+      "description": "Click checkout button",
+      "screenshot_url": "screenshots/step_005.png",
+      "dom_element": {
+        "selector": "button.checkout-btn",
+        "tag_name": "button",
+        "text_content": "Proceed to Checkout"
+      },
+      "expected_outcome": "Redirected to checkout page"
+    },
+    {
+      "timestamp": "2025-10-10T22:57:22+05:30",
+      "action_type": "type",
+      "description": "Enter email address",
+      "screenshot_url": "screenshots/step_006.png",
+      "input_text": "customer@example.com",
+      "dom_element": {
+        "selector": "input[name='email']",
+        "tag_name": "input",
+        "attributes": {
+          "type": "email",
+          "name": "email",
+          "required": "true"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-10-10T22:57:25+05:30",
+      "action_type": "type",
+      "description": "Enter shipping address",
+      "screenshot_url": "screenshots/step_007.png",
+      "input_text": "123 Main Street",
+      "dom_element": {
+        "selector": "input[name='address']",
+        "tag_name": "input",
+        "attributes": {
+          "type": "text",
+          "name": "address"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-10-10T22:57:30+05:30",
+      "action_type": "select",
+      "description": "Select shipping method",
+      "screenshot_url": "screenshots/step_008.png",
+      "input_text": "standard",
+      "dom_element": {
+        "selector": "select[name='shipping']",
+        "tag_name": "select"
+      }
+    },
+    {
+      "timestamp": "2025-10-10T22:57:35+05:30",
+      "action_type": "click",
+      "description": "Submit order",
+      "screenshot_url": "screenshots/step_009.png",
+      "dom_element": {
+        "selector": "button[type='submit']",
+        "tag_name": "button",
+        "text_content": "Place Order"
+      },
+      "expected_outcome": "Order confirmation page appears",
+      "wait_for": ".order-confirmation"
+    }
+  ],
+  "expected_final_state": "Order is placed and confirmation number is displayed"
+}
