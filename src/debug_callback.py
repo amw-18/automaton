@@ -29,9 +29,8 @@ class NodeExecutionLogger(BaseCallbackHandler):
         self.log_file = Path(log_file)
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
         
-        # Initialize log file with header
-        if not self.log_file.exists():
-            self._write_header()
+        # Always overwrite log file with header (clear previous logs)
+        self._write_header()
         
         self.current_node = None
         self.node_start_time = None

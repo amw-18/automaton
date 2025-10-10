@@ -213,3 +213,5 @@ vertex-ai-credentials.json
 
 # Debug logs
 logs/
+screenshots/
+gen_tests/

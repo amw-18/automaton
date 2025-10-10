@@ -6,10 +6,12 @@ browsers and generate test scripts.
 """
 
 import asyncio
+import os
 from typing import Optional, Any, Callable, Literal
 import json
 from pydantic import BaseModel, Field
 from playwright.async_api import async_playwright, Browser, Page, BrowserContext
+from src.vision_labeler import VisionLabeler, ElementInfo
 
 
 class ToolParameter(BaseModel):
@@ -74,7 +76,7 @@ class PlaywrightToolkit:
     Manages browser lifecycle and provides tool definitions.
     """
     
-    def __init__(self, headless: bool = False, browser_type: str = "chromium"):
+    def __init__(self, headless: bool = False, browser_type: str = "chromium", use_vision: bool = True):
         self.headless = headless
         self.browser_type = browser_type
         self.browser: Optional[Browser] = None
@@ -86,6 +88,16 @@ class PlaywrightToolkit:
         self.test_script_content: str = ""
         self.script_file_path: Optional[str] = None
         
+        # Vision-based element labeling
+        self.use_vision = use_vision
+        self.vision_labeler = VisionLabeler() if use_vision else None
+        self.current_elements: list[ElementInfo] = []  # Current labeled elements on page
+        self.last_screenshot_path: Optional[str] = None
+        
+        # Create screenshots directory if using vision
+        if self.use_vision:
+            os.makedirs("screenshots", exist_ok=True)
+        
         # Tool registry
         self.tools: dict[str, Tool] = {}
         self._register_tools()
@@ -93,109 +105,44 @@ class PlaywrightToolkit:
     def _register_tools(self):
         """Register all available tools."""
         
-        # Navigation tool
+        # Navigation tool (still needed)
         self.register_tool(Tool(
             name="navigate_to_url",
-            description="Navigate the browser to a specific URL",
+            description="Navigate to a URL in the browser. After navigation, you MUST call capture_labeled_screenshot to see what's on the page.",
             parameters=[
                 ToolParameter(name="url", type="string", description="The URL to navigate to"),
-                ToolParameter(name="wait_until", type="string", 
-                            description="Wait until page reaches this state: load, domcontentloaded, networkidle, commit",
-                            required=False, 
-                            enum=["load", "domcontentloaded", "networkidle", "commit"],
-                            default="load")
+                ToolParameter(name="wait_until", type="string", description="When to consider navigation complete (load, domcontentloaded, networkidle)", required=False, default="load", enum=["load", "domcontentloaded", "networkidle", "commit"])
             ],
             handler=self._navigate_to_url
         ))
         
-        # Click tool
-        self.register_tool(Tool(
-            name="click_element",
-            description="Click on an element identified by selector",
-            parameters=[
-                ToolParameter(name="selector", type="string", description="CSS selector or text selector for the element"),
-                ToolParameter(name="timeout", type="number", description="Timeout in milliseconds", required=False, default=30000),
-                ToolParameter(name="force", type="boolean", description="Force click even if element not ready", required=False, default=False)
-            ],
-            handler=self._click_element
-        ))
-        
-        # Type/Fill tool
-        self.register_tool(Tool(
-            name="type_text",
-            description="Type text into an input field",
-            parameters=[
-                ToolParameter(name="selector", type="string", description="CSS selector for the input element"),
-                ToolParameter(name="text", type="string", description="Text to type into the field"),
-                ToolParameter(name="clear_first", type="boolean", description="Clear existing text before typing", required=False, default=True),
-                ToolParameter(name="delay", type="number", description="Delay between keystrokes in ms", required=False, default=0)
-            ],
-            handler=self._type_text
-        ))
-        
-        # Select option tool
-        self.register_tool(Tool(
-            name="select_option",
-            description="Select an option from a dropdown/select element",
-            parameters=[
-                ToolParameter(name="selector", type="string", description="CSS selector for the select element"),
-                ToolParameter(name="value", type="string", description="Value or label of the option to select")
-            ],
-            handler=self._select_option
-        ))
-        
-        # Wait for selector tool
-        self.register_tool(Tool(
-            name="wait_for_selector",
-            description="Wait for an element to appear on the page",
-            parameters=[
-                ToolParameter(name="selector", type="string", description="CSS selector to wait for"),
-                ToolParameter(name="timeout", type="number", description="Timeout in milliseconds", required=False, default=30000),
-                ToolParameter(name="state", type="string", description="State to wait for: visible, attached, hidden, detached",
-                            required=False, enum=["visible", "attached", "hidden", "detached"], default="visible")
-            ],
-            handler=self._wait_for_selector
-        ))
-        
-        # Screenshot tool
-        self.register_tool(Tool(
-            name="take_screenshot",
-            description="Take a screenshot of the current page or specific element",
-            parameters=[
-                ToolParameter(name="path", type="string", description="File path to save the screenshot"),
-                ToolParameter(name="selector", type="string", description="CSS selector for element to screenshot (full page if not provided)", required=False),
-                ToolParameter(name="full_page", type="boolean", description="Capture full scrollable page", required=False, default=False)
-            ],
-            handler=self._take_screenshot
-        ))
-        
-        # Get text content tool
-        self.register_tool(Tool(
-            name="get_text_content",
-            description="Get the text content of an element",
-            parameters=[
-                ToolParameter(name="selector", type="string", description="CSS selector for the element")
-            ],
-            handler=self._get_text_content
-        ))
-        
-        # Check visibility tool
-        self.register_tool(Tool(
-            name="is_visible",
-            description="Check if an element is visible on the page",
-            parameters=[
-                ToolParameter(name="selector", type="string", description="CSS selector for the element")
-            ],
-            handler=self._is_visible
-        ))
-        
-        # Get page state tool
-        self.register_tool(Tool(
-            name="get_page_state",
-            description="Get comprehensive information about the current page state including URL, title, and visible elements",
-            parameters=[],
-            handler=self._get_page_state
-        ))
+        # Vision-based tools (REQUIRED - the ONLY way to interact with pages)
+        if self.use_vision:
+            self.register_tool(Tool(
+                name="capture_labeled_screenshot",
+                description="Capture a screenshot with all interactive elements labeled with numbers. Returns the list of labeled elements that you can interact with.",
+                parameters=[],
+                handler=self._capture_labeled_screenshot
+            ))
+            
+            self.register_tool(Tool(
+                name="click_label",
+                description="Click on an element by its label number (from the labeled screenshot). Much more reliable than CSS selectors.",
+                parameters=[
+                    ToolParameter(name="label", type="number", description="The label number of the element to click")
+                ],
+                handler=self._click_label
+            ))
+            
+            self.register_tool(Tool(
+                name="type_into_label",
+                description="Type text into an input field by its label number (from the labeled screenshot).",
+                parameters=[
+                    ToolParameter(name="label", type="number", description="The label number of the input field"),
+                    ToolParameter(name="text", type="string", description="The text to type")
+                ],
+                handler=self._type_into_label
+            ))
         
         # Test script tools - similar to file editing tools
         self.register_tool(Tool(
@@ -228,7 +175,7 @@ class PlaywrightToolkit:
             name="save_test_script_to_file",
             description="Save the current test script content to a file on disk",
             parameters=[
-                ToolParameter(name="file_path", type="string", description="Path where the test script should be saved (e.g., 'tests/test_login.py')")
+                ToolParameter(name="file_path", type="string", description="Path where the test script should be saved (e.g., 'gen_tests/test_login.py')")
             ],
             handler=self._save_test_script_to_file
         ))
@@ -461,6 +408,119 @@ Key Elements Present:
             
         except Exception as e:
             return f"Error getting page state: {str(e)}"
+    
+    async def _capture_labeled_screenshot(self) -> str:
+        """Capture screenshot with labeled interactive elements."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        if not self.vision_labeler:
+            raise RuntimeError("Vision labeling is not enabled.")
+        
+        # Ensure screenshots directory exists
+        os.makedirs("screenshots", exist_ok=True)
+        print(f"📸 Capturing labeled screenshot...")
+        
+        try:
+            # Capture and label
+            screenshot_path, elements, image_bytes = await self.vision_labeler.capture_and_label_page(
+                self.page,
+                output_path=None  # Will auto-generate path
+            )
+            
+            print(f"📸 Screenshot saved to: {screenshot_path}")
+            print(f"📸 Found {len(elements)} interactive elements")
+            
+            # Store current elements
+            self.current_elements = elements
+            self.last_screenshot_path = screenshot_path
+            
+            # Format element list for LLM
+            elements_text = self.vision_labeler.format_elements_for_llm(elements)
+            
+            return f"""Captured labeled screenshot: {screenshot_path}
+
+{elements_text}
+
+You can now interact with these elements using their label numbers:
+- Use click_label(label=N) to click an element
+- Use type_into_label(label=N, text="...") to type into an input field"""
+        
+        except Exception as e:
+            print(f"❌ Error in capture_labeled_screenshot: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    async def _click_label(self, label: int) -> str:
+        """Click an element by its label number."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        if not self.current_elements:
+            raise RuntimeError("No labeled elements available. Call capture_labeled_screenshot first.")
+        
+        # Find element by label
+        element_info = None
+        for elem in self.current_elements:
+            if elem.label == label:
+                element_info = elem
+                break
+        
+        if not element_info:
+            available_labels = [e.label for e in self.current_elements]
+            raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
+        
+        # Click using the selector
+        await self.page.click(element_info.selector)
+        
+        # Get page context after click
+        current_url = self.page.url
+        
+        return f"""Clicked element [Label {label}]
+Element: {element_info.element_type}
+Text: {element_info.text[:50] if element_info.text else '(no text)'}
+Selector: {element_info.selector}
+Current URL after click: {current_url}
+
+Consider calling capture_labeled_screenshot again to see the updated page."""
+    
+    async def _type_into_label(self, label: int, text: str) -> str:
+        """Type text into an input element by its label number."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        if not self.current_elements:
+            raise RuntimeError("No labeled elements available. Call capture_labeled_screenshot first.")
+        
+        # Find element by label
+        element_info = None
+        for elem in self.current_elements:
+            if elem.label == label:
+                element_info = elem
+                break
+        
+        if not element_info:
+            available_labels = [e.label for e in self.current_elements]
+            raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
+        
+        # Type using the selector
+        await self.page.fill(element_info.selector, text)
+        
+        # Verify what was typed
+        try:
+            element = await self.page.query_selector(element_info.selector)
+            if element:
+                actual_value = await element.input_value()
+                return f"""Typed '{text}' into element [Label {label}]
+Element: {element_info.element_type}
+Placeholder: {element_info.attributes.get('placeholder', '(none)')}
+Selector: {element_info.selector}
+Actual value in field: '{actual_value}'"""
+        except:
+            pass
+        
+        return f"Typed '{text}' into element [Label {label}]"
     
     # Test script editing tools
     

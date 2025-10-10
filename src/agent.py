@@ -302,7 +302,7 @@ async def main():
         # Generate test script
         result = await agent.generate_test_script(
             workflow=workflow,
-            output_path="tests/test_generated.py"
+            output_path="gen_tests/test_generated.py"
         )
         
         if result.success:
