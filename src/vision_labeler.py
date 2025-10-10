@@ -25,7 +25,7 @@ class ElementInfo:
         self.attributes = attributes
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format."""
+        """Convert to dictionary format. Primarily used for debugging and detailed inspection."""
         return {
             "label": self.label,
             "selector": self.selector,
@@ -262,45 +262,51 @@ class VisionLabeler:
         return annotated_bytes, element_infos
     
     def _generate_selector(self, elem: Dict[str, Any]) -> str:
-        """Generate a CSS selector for the element."""
+        """Generate a CSS selector for the element. Returns None if no good selector available."""
         attrs = elem['attributes']
         
-        # Priority: id > name > unique class > tag
+        # Priority: id > name > aria-label > class combinations
         if attrs['id']:
             return f"#{attrs['id']}"
         elif attrs['name']:
             return f"{elem['tagName']}[name='{attrs['name']}']"
         elif attrs['ariaLabel']:
             return f"{elem['tagName']}[aria-label='{attrs['ariaLabel']}']"
-        else:
-            # Fallback to index-based selector
-            return f"{elem['tagName']}:nth-of-type({elem['index'] + 1})"
+        elif attrs['class']:
+            # Try using class if it looks somewhat unique
+            classes = attrs['class'].strip().split()
+            if classes and len(classes) <= 3:  # Not too many classes
+                class_selector = '.'.join(classes)
+                return f"{elem['tagName']}.{class_selector}"
+        
+        # No good selector available - will use coordinates instead
+        return None
     
     def format_elements_for_llm(self, elements: List[ElementInfo]) -> str:
         """
         Format element list for LLM consumption.
+        Groups elements by type and shows only label numbers.
         
-        Returns a readable string listing all labeled elements.
+        Returns a concise string with elements grouped by type.
         """
         if not elements:
             return "No interactive elements found on the page."
         
+        # Group elements by type
+        type_groups = {}
+        for elem in elements:
+            elem_type = elem.element_type
+            if elem_type not in type_groups:
+                type_groups[elem_type] = []
+            type_groups[elem_type].append(elem.label)
+        
+        # Format output
         output = f"Found {len(elements)} interactive elements:\n\n"
         
-        for elem in elements:
-            elem_dict = elem.to_dict()
-            text_preview = elem_dict['text'][:50] if elem_dict['text'] else '(no text)'
-            
-            output += f"[{elem_dict['label']}] {elem_dict['type']}\n"
-            output += f"    Text: {text_preview}\n"
-            output += f"    Position: {elem_dict['position']}\n"
-            
-            # Add relevant attributes
-            if elem.attributes.get('placeholder'):
-                output += f"    Placeholder: {elem.attributes['placeholder']}\n"
-            if elem.attributes.get('ariaLabel'):
-                output += f"    Aria-label: {elem.attributes['ariaLabel']}\n"
-            
-            output += "\n"
+        # Sort by type name for consistency
+        for elem_type in sorted(type_groups.keys()):
+            labels = type_groups[elem_type]
+            labels_str = ", ".join(str(label) for label in sorted(labels))
+            output += f"{elem_type}: {labels_str}\n"
         
         return output.strip()

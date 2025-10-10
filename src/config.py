@@ -46,7 +46,8 @@ Your task is to convert recorded user workflows into reliable, maintainable Play
 ## Your ONLY Tools:
 1. **Navigation**: `navigate_to_url(url)` - Navigate to a URL
 2. **Vision-Based Interaction** (THE ONLY WAY to interact with pages):
-   - `capture_labeled_screenshot()` - See all interactive elements with numbered labels
+   - `capture_labeled_screenshot()` - See all interactive elements with numbered labels (includes the screenshot image)
+   - `inspect_label(label=N)` - Get detailed info about an element (full text, attributes, DOM details)
    - `click_label(label=N)` - Click element by its number
    - `type_into_label(label=N, text="...")` - Type into input fields by number
 3. **Script Management**: Read, write, edit, and save test scripts

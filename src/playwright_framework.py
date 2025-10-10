@@ -6,6 +6,7 @@ browsers and generate test scripts.
 """
 
 import asyncio
+import base64
 import os
 from typing import Optional, Any, Callable, Literal
 import json
@@ -126,6 +127,15 @@ class PlaywrightToolkit:
             ))
             
             self.register_tool(Tool(
+                name="inspect_label",
+                description="Get detailed information about a specific labeled element including its full text content, all attributes, and DOM details. Use this when you need more information about an element before interacting with it.",
+                parameters=[
+                    ToolParameter(name="label", type="number", description="The label number of the element to inspect")
+                ],
+                handler=self._inspect_label
+            ))
+            
+            self.register_tool(Tool(
                 name="click_label",
                 description="Click on an element by its label number (from the labeled screenshot). Much more reliable than CSS selectors.",
                 parameters=[
@@ -209,12 +219,23 @@ class PlaywrightToolkit:
     
     async def cleanup(self):
         """Close browser and cleanup resources."""
-        if self.context:
-            await self.context.close()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        try:
+            if self.context:
+                await self.context.close()
+        except Exception as e:
+            print(f"⚠️  Error closing context: {e}")
+        
+        try:
+            if self.browser:
+                await self.browser.close()
+        except Exception as e:
+            print(f"⚠️  Error closing browser: {e}")
+        
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+        except Exception as e:
+            print(f"⚠️  Error stopping playwright: {e}")
     
     async def execute_tool(self, tool_name: str, **kwargs) -> dict:
         """
@@ -409,7 +430,7 @@ Key Elements Present:
         except Exception as e:
             return f"Error getting page state: {str(e)}"
     
-    async def _capture_labeled_screenshot(self) -> str:
+    async def _capture_labeled_screenshot(self) -> dict:
         """Capture screenshot with labeled interactive elements."""
         if not self.page:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
@@ -438,19 +459,129 @@ Key Elements Present:
             # Format element list for LLM
             elements_text = self.vision_labeler.format_elements_for_llm(elements)
             
-            return f"""Captured labeled screenshot: {screenshot_path}
+            # Encode image as base64 for vision models
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            
+            # Return structured data with both text and image
+            return {
+                "screenshot_path": screenshot_path,
+                "elements_summary": elements_text,
+                "image_base64": image_base64,
+                "element_count": len(elements),
+                "text_description": f"""Captured labeled screenshot with {len(elements)} interactive elements.
 
 {elements_text}
 
-You can now interact with these elements using their label numbers:
-- Use click_label(label=N) to click an element
-- Use type_into_label(label=N, text="...") to type into an input field"""
+Available actions:
+- Use inspect_label(label=N) to get detailed info about an element
+- Use click_label(label=N) to click an element  
+- Use type_into_label(label=N, text="...") to type into an input field
+
+The labeled screenshot image shows numbered boxes over each interactive element."""
+            }
         
         except Exception as e:
             print(f"❌ Error in capture_labeled_screenshot: {e}")
             import traceback
             traceback.print_exc()
             raise
+    
+    async def _inspect_label(self, label: int) -> str:
+        """Get detailed information about a specific labeled element."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        if not self.current_elements:
+            raise RuntimeError("No labeled elements available. Call capture_labeled_screenshot first.")
+        
+        # Find element by label
+        element_info = None
+        for elem in self.current_elements:
+            if elem.label == label:
+                element_info = elem
+                break
+        
+        if not element_info:
+            available_labels = [e.label for e in self.current_elements]
+            raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
+        
+        # Get detailed information from the page
+        try:
+            js_code = f"""
+            () => {{
+                const element = document.querySelector('{element_info.selector}');
+                if (!element) return null;
+                
+                // Get all attributes
+                const attrs = {{}};
+                for (const attr of element.attributes) {{
+                    attrs[attr.name] = attr.value;
+                }}
+                
+                // Get computed styles
+                const style = window.getComputedStyle(element);
+                
+                return {{
+                    tagName: element.tagName.toLowerCase(),
+                    textContent: element.textContent || '',
+                    innerText: element.innerText || '',
+                    innerHTML: element.innerHTML ? element.innerHTML.substring(0, 500) : '',
+                    value: element.value || '',
+                    attributes: attrs,
+                    isVisible: style.display !== 'none' && style.visibility !== 'hidden',
+                    isEnabled: !element.disabled,
+                    classList: Array.from(element.classList),
+                    href: element.href || '',
+                    src: element.src || '',
+                }};
+            }}
+            """
+            
+            detailed_info = await self.page.evaluate(js_code)
+            
+            if not detailed_info:
+                return f"Element [Label {label}] not found in DOM (may have been removed)"
+            
+            # Format the output
+            output = f"""Element [Label {label}] Detailed Information:
+
+Tag: {detailed_info['tagName']}
+Type: {element_info.element_type}
+Selector: {element_info.selector}
+
+Text Content: {detailed_info['textContent'][:200] if detailed_info['textContent'] else '(empty)'}
+Inner Text: {detailed_info['innerText'][:200] if detailed_info['innerText'] else '(empty)'}
+"""
+            
+            if detailed_info.get('value'):
+                output += f"\nCurrent Value: {detailed_info['value']}"
+            
+            if detailed_info.get('href'):
+                output += f"\nHref: {detailed_info['href']}"
+                
+            if detailed_info.get('src'):
+                output += f"\nSrc: {detailed_info['src']}"
+            
+            output += f"\n\nVisibility: {'Visible' if detailed_info['isVisible'] else 'Hidden'}"
+            output += f"\nEnabled: {'Yes' if detailed_info['isEnabled'] else 'No (disabled)'}"
+            
+            if detailed_info['classList']:
+                output += f"\nCSS Classes: {', '.join(detailed_info['classList'])}"
+            
+            output += "\n\nAttributes:"
+            for attr_name, attr_value in detailed_info['attributes'].items():
+                if attr_value and len(str(attr_value)) < 100:
+                    output += f"\n  {attr_name}: {attr_value}"
+                elif attr_value:
+                    output += f"\n  {attr_name}: {str(attr_value)[:100]}..."
+            
+            if detailed_info['innerHTML'] and len(detailed_info['innerHTML']) > 0:
+                output += f"\n\nInner HTML (truncated): {detailed_info['innerHTML'][:300]}..."
+            
+            return output
+            
+        except Exception as e:
+            return f"Error inspecting element [Label {label}]: {str(e)}"
     
     async def _click_label(self, label: int) -> str:
         """Click an element by its label number."""
@@ -471,19 +602,147 @@ You can now interact with these elements using their label numbers:
             available_labels = [e.label for e in self.current_elements]
             raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
         
-        # Click using the selector
-        await self.page.click(element_info.selector)
+        # Determine if this element is likely to trigger navigation
+        is_navigation_element = (
+            element_info.element_type in ['a', 'submit'] or
+            'link' in element_info.element_type.lower() or
+            element_info.attributes.get('href') or
+            element_info.element_type == 'button' and 'submit' in element_info.text.lower()
+        )
+        
+        # Calculate center coordinates from bounding box
+        bbox = element_info.bbox
+        center_x = bbox['x'] + bbox['width'] / 2
+        center_y = bbox['y'] + bbox['height'] / 2
+        
+        # Try clicking - use coordinates if selector is None or unreliable
+        use_coordinates = element_info.selector is None
+        new_page = None
+        
+        try:
+            if use_coordinates:
+                # Click by coordinates (most reliable)
+                print(f"📍 Clicking at coordinates ({int(center_x)}, {int(center_y)})...")
+                if is_navigation_element:
+                    # Handle both new page and same-page navigation
+                    async with self.context.expect_page(timeout=1000) as new_page_info:
+                        await self.page.mouse.click(center_x, center_y)
+                    try:
+                        new_page = await new_page_info.value
+                        print(f"🆕 New page opened, switching to it...")
+                        self.page = new_page
+                        await self.page.wait_for_load_state('domcontentloaded', timeout=10000)
+                    except:
+                        # No new page, check for navigation on current page
+                        await self.page.wait_for_load_state('domcontentloaded', timeout=10000)
+                else:
+                    await self.page.mouse.click(center_x, center_y)
+                    await self.page.wait_for_timeout(100)
+            else:
+                # Try clicking by selector first
+                if is_navigation_element:
+                    print(f"🔗 Clicking navigation element, waiting for page load...")
+                    async with self.context.expect_page(timeout=1000) as new_page_info:
+                        await self.page.click(element_info.selector, timeout=2000)
+                    try:
+                        new_page = await new_page_info.value
+                        print(f"🆕 New page opened, switching to it...")
+                        self.page = new_page
+                        await self.page.wait_for_load_state('domcontentloaded', timeout=10000)
+                    except:
+                        # No new page, check for navigation on current page
+                        await self.page.wait_for_load_state('domcontentloaded', timeout=10000)
+                else:
+                    await self.page.click(element_info.selector, timeout=2000, no_wait_after=True)
+                    await self.page.wait_for_timeout(100)
+        except Exception as e:
+            # Fallback: click by coordinates (most reliable)
+            print(f"⚠️  Selector-based click failed, using coordinates: {e}")
+            try:
+                if is_navigation_element:
+                    # Try to catch new page
+                    async with self.context.expect_page(timeout=1000) as new_page_info:
+                        await self.page.mouse.click(center_x, center_y)
+                    try:
+                        new_page = await new_page_info.value
+                        print(f"🆕 New page opened, switching to it...")
+                        self.page = new_page
+                        await self.page.wait_for_load_state('domcontentloaded', timeout=10000)
+                    except:
+                        # No new page, just wait a bit
+                        await self.page.wait_for_timeout(500)
+                else:
+                    await self.page.mouse.click(center_x, center_y)
+                    await self.page.wait_for_timeout(100)
+            except:
+                # Last resort: just click the coordinates, don't wait for navigation
+                await self.page.mouse.click(center_x, center_y)
+                await self.page.wait_for_timeout(100)
         
         # Get page context after click
         current_url = self.page.url
+        new_page_opened = new_page is not None
         
-        return f"""Clicked element [Label {label}]
-Element: {element_info.element_type}
-Text: {element_info.text[:50] if element_info.text else '(no text)'}
-Selector: {element_info.selector}
-Current URL after click: {current_url}
+        # Build detailed automation context
+        automation_notes = []
+        
+        # Note the method used
+        if use_coordinates:
+            automation_notes.append(f"✓ Clicked using COORDINATES: ({int(center_x)}, {int(center_y)})")
+            automation_notes.append(f"  Python code: await page.mouse.click({center_x}, {center_y})")
+        elif element_info.selector:
+            automation_notes.append(f"✓ Clicked using SELECTOR: {element_info.selector}")
+            automation_notes.append(f"  Python code: await page.click('{element_info.selector}')")
+        
+        # Note if new page opened
+        if new_page_opened:
+            automation_notes.append(f"✓ NEW PAGE OPENED (target='_blank' or window.open)")
+            automation_notes.append(f"  Python code: async with context.expect_page() as new_page_info:")
+            automation_notes.append(f"              await page.click(...)")
+            automation_notes.append(f"              new_page = await new_page_info.value")
+            automation_notes.append(f"              page = new_page  # Switch to new page")
+        elif is_navigation_element:
+            automation_notes.append(f"✓ Navigation occurred on SAME PAGE")
+            automation_notes.append(f"  Python code: await page.click(...)")
+            automation_notes.append(f"              await page.wait_for_load_state('domcontentloaded')")
+        else:
+            automation_notes.append(f"✓ In-page interaction (no navigation)")
+        
+        # Provide alternative selectors if available
+        selector_alternatives = []
+        if element_info.attributes.get('id'):
+            selector_alternatives.append(f"By ID: #{element_info.attributes['id']}")
+        if element_info.attributes.get('name'):
+            selector_alternatives.append(f"By name: [name='{element_info.attributes['name']}']")
+        if element_info.attributes.get('ariaLabel'):
+            selector_alternatives.append(f"By aria-label: [aria-label='{element_info.attributes['ariaLabel']}']")
+        if element_info.text and len(element_info.text.strip()) > 0:
+            text_preview = element_info.text.strip()[:30]
+            selector_alternatives.append(f"By text: text='{text_preview}'")
+        
+        result = f"""Clicked element [Label {label}] successfully!
 
-Consider calling capture_labeled_screenshot again to see the updated page."""
+Element Details:
+- Type: {element_info.element_type}
+- Text: {element_info.text[:50] if element_info.text else '(no text)'}
+- Position: ({int(bbox['x'])}, {int(bbox['y'])})
+
+Automation Method Used:
+{chr(10).join(automation_notes)}
+
+Alternative Selectors Available:
+{chr(10).join(f"- {alt}" for alt in selector_alternatives) if selector_alternatives else "- (coordinates only - no stable selectors)"}
+
+Result:
+- Current URL: {current_url}
+- Page changed: {'Yes - new page opened' if new_page_opened else 'No - same page'}
+
+💡 IMPORTANT FOR SCRIPT GENERATION:
+{'- Use context.expect_page() to catch new page opening' if new_page_opened else '- Use page.click() for same-page navigation' if is_navigation_element else '- Use page.click() with no_wait_after=True for in-page interactions'}
+
+Consider calling capture_labeled_screenshot again to see the updated page state."""
+        
+        return result
     
     async def _type_into_label(self, label: int, text: str) -> str:
         """Type text into an input element by its label number."""
@@ -504,23 +763,90 @@ Consider calling capture_labeled_screenshot again to see the updated page."""
             available_labels = [e.label for e in self.current_elements]
             raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
         
-        # Type using the selector
-        await self.page.fill(element_info.selector, text)
+        # Type using the selector or coordinates
+        bbox = element_info.bbox
+        center_x = bbox['x'] + bbox['width'] / 2
+        center_y = bbox['y'] + bbox['height'] / 2
+        used_method = None
         
-        # Verify what was typed
         try:
-            element = await self.page.query_selector(element_info.selector)
-            if element:
-                actual_value = await element.input_value()
-                return f"""Typed '{text}' into element [Label {label}]
-Element: {element_info.element_type}
-Placeholder: {element_info.attributes.get('placeholder', '(none)')}
-Selector: {element_info.selector}
-Actual value in field: '{actual_value}'"""
-        except:
-            pass
+            if element_info.selector:
+                await self.page.fill(element_info.selector, text, timeout=2000)
+                used_method = "fill"
+            else:
+                # Click to focus, then type
+                print(f"📍 Clicking input at coordinates ({int(center_x)}, {int(center_y)}) to focus...")
+                await self.page.mouse.click(center_x, center_y)
+                await self.page.wait_for_timeout(50)
+                await self.page.keyboard.type(text)
+                used_method = "click_and_type"
+        except Exception as e:
+            # Fallback: click coordinates and type
+            print(f"⚠️  Fill failed, using click + type: {e}")
+            await self.page.mouse.click(center_x, center_y)
+            await self.page.wait_for_timeout(50)
+            # Clear existing content
+            await self.page.keyboard.press("Control+A")
+            await self.page.keyboard.type(text)
+            used_method = "click_and_type_with_clear"
         
-        return f"Typed '{text}' into element [Label {label}]"
+        # Verify what was typed and build detailed response
+        actual_value = text  # default
+        if element_info.selector:
+            try:
+                element = await self.page.query_selector(element_info.selector)
+                if element:
+                    actual_value = await element.input_value()
+            except:
+                pass
+        
+        # Build automation context
+        automation_notes = []
+        
+        if used_method == "fill":
+            automation_notes.append(f"✓ Typed using FILL method with selector")
+            automation_notes.append(f"  Python code: await page.fill('{element_info.selector}', '{text}')")
+        elif used_method in ["click_and_type", "click_and_type_with_clear"]:
+            automation_notes.append(f"✓ Typed using CLICK + TYPE method (coordinates)")
+            automation_notes.append(f"  Python code: await page.mouse.click({center_x}, {center_y})")
+            if used_method == "click_and_type_with_clear":
+                automation_notes.append(f"              await page.keyboard.press('Control+A')  # Clear existing")
+            automation_notes.append(f"              await page.keyboard.type('{text}')")
+        
+        # Provide alternative selectors
+        selector_alternatives = []
+        if element_info.attributes.get('id'):
+            selector_alternatives.append(f"By ID: #{element_info.attributes['id']}")
+        if element_info.attributes.get('name'):
+            selector_alternatives.append(f"By name: [name='{element_info.attributes['name']}']")
+        if element_info.attributes.get('placeholder'):
+            selector_alternatives.append(f"By placeholder: [placeholder='{element_info.attributes['placeholder']}']")
+        if element_info.attributes.get('ariaLabel'):
+            selector_alternatives.append(f"By aria-label: [aria-label='{element_info.attributes['ariaLabel']}']")
+        
+        result = f"""Typed '{text}' into element [Label {label}] successfully!
+
+Element Details:
+- Type: {element_info.element_type}
+- Placeholder: {element_info.attributes.get('placeholder', '(none)')}
+- Position: ({int(bbox['x'])}, {int(bbox['y'])})
+
+Automation Method Used:
+{chr(10).join(automation_notes)}
+
+Alternative Selectors Available:
+{chr(10).join(f"- {alt}" for alt in selector_alternatives) if selector_alternatives else "- (coordinates only - no stable selectors)"}
+
+Result:
+- Actual value in field: '{actual_value}'
+- Value matches input: {'✓ Yes' if actual_value == text else '✗ No'}
+
+💡 IMPORTANT FOR SCRIPT GENERATION:
+- Prefer page.fill() for simple text input (faster and more reliable)
+- Use page.type() for character-by-character typing if needed
+- Always verify input with element.input_value() in tests"""
+        
+        return result
     
     # Test script editing tools
     

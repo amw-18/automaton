@@ -148,16 +148,54 @@ def create_tool_node(toolkit):
             # Execute the tool
             result = await toolkit.execute_tool(tool_name, **tool_args)
             
-            # Create tool message with result
-            # Ensure content is not empty
-            content = json.dumps(result) if result else json.dumps({"success": False, "error": "No result"})
-            
-            tool_message = ToolMessage(
-                content=content,
-                tool_call_id=tool_call_id,
-                name=tool_name,
-            )
-            tool_messages.append(tool_message)
+            # Handle screenshot tool specially - include image for vision models
+            if tool_name == "capture_labeled_screenshot" and result.get("success"):
+                tool_result = result.get("result", {})
+                
+                # Check if we have image data
+                if isinstance(tool_result, dict) and "image_base64" in tool_result:
+                    # ToolMessage with text description
+                    tool_message = ToolMessage(
+                        content=tool_result.get("text_description", "Screenshot captured"),
+                        tool_call_id=tool_call_id,
+                        name=tool_name,
+                    )
+                    tool_messages.append(tool_message)
+                    
+                    # Add HumanMessage with the image for vision context
+                    image_message = HumanMessage(
+                        content=[
+                            {
+                                "type": "text",
+                                "text": f"Here is the labeled screenshot (saved to {tool_result.get('screenshot_path', 'screenshot')}):"
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{tool_result['image_base64']}"
+                                }
+                            }
+                        ]
+                    )
+                    tool_messages.append(image_message)
+                else:
+                    # Fallback to JSON
+                    content = json.dumps(result)
+                    tool_message = ToolMessage(
+                        content=content,
+                        tool_call_id=tool_call_id,
+                        name=tool_name,
+                    )
+                    tool_messages.append(tool_message)
+            else:
+                # Regular tool result - just JSON
+                content = json.dumps(result) if result else json.dumps({"success": False, "error": "No result"})
+                tool_message = ToolMessage(
+                    content=content,
+                    tool_call_id=tool_call_id,
+                    name=tool_name,
+                )
+                tool_messages.append(tool_message)
             
             # Track execution state
             execution_state = state.get("execution_state", {})
