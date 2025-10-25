@@ -64,7 +64,7 @@ class VisualWorkflowAction(BaseModel):
 class WorkflowAction(BaseModel):
     """A single action/step in the workflow (includes DOM and timestamp data)."""
 
-    timestamp: str = Field(..., description="Relative to start of video... seconds into the video")
+    timestamp: Optional[str] = Field(None, description="Relative to start of video... seconds into the video")
     action_type: Literal["click", "type", "navigate", "scroll", "select", "hover", "wait"] = Field(
         ..., description="Type of action performed"
     )

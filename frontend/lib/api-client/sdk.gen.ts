@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
+import type { GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -43,6 +43,18 @@ export const uploadVideoApiVideosUploadPost = <ThrowOnError extends boolean = fa
 export const getSessionApiSessionsSessionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetSessionApiSessionsSessionIdGetData, ThrowOnError>) => {
     return (options.client ?? client).get<GetSessionApiSessionsSessionIdGetResponses, GetSessionApiSessionsSessionIdGetErrors, ThrowOnError>({
         url: '/api/sessions/{session_id}',
+        ...options
+    });
+};
+
+/**
+ * Get Workflow
+ *
+ * Get the processed workflow JSON for a session
+ */
+export const getWorkflowApiSessionsSessionIdWorkflowGet = <ThrowOnError extends boolean = false>(options: Options<GetWorkflowApiSessionsSessionIdWorkflowGetData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetWorkflowApiSessionsSessionIdWorkflowGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, ThrowOnError>({
+        url: '/api/sessions/{session_id}/workflow',
         ...options
     });
 };

@@ -35,11 +35,11 @@ export type ProcessVideoRequest = {
     /**
      * Workflow Name
      */
-    workflow_name: string;
+    workflow_name?: string | null;
     /**
      * Workflow Description
      */
-    workflow_description: string;
+    workflow_description?: string | null;
 };
 
 /**
@@ -105,6 +105,34 @@ export type GetSessionApiSessionsSessionIdGetErrors = {
 export type GetSessionApiSessionsSessionIdGetError = GetSessionApiSessionsSessionIdGetErrors[keyof GetSessionApiSessionsSessionIdGetErrors];
 
 export type GetSessionApiSessionsSessionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetWorkflowApiSessionsSessionIdWorkflowGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/sessions/{session_id}/workflow';
+};
+
+export type GetWorkflowApiSessionsSessionIdWorkflowGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkflowApiSessionsSessionIdWorkflowGetError = GetWorkflowApiSessionsSessionIdWorkflowGetErrors[keyof GetWorkflowApiSessionsSessionIdWorkflowGetErrors];
+
+export type GetWorkflowApiSessionsSessionIdWorkflowGetResponses = {
     /**
      * Successful Response
      */

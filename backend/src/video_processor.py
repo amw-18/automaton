@@ -33,7 +33,8 @@ class VideoAnalysisResult(BaseModel):
     actions: list[VisualWorkflowAction] = Field(
         ..., description="List of detected user actions in chronological order"
     )
-    summary: Optional[str] = Field(None, description="Brief summary of the workflow")
+    workflow_name: Optional[str] = Field(None, description="Short name for the workflow (e.g., 'Login flow', 'Checkout process')")
+    workflow_description: Optional[str] = Field(None, description="Brief description of what the workflow does")
 
 
 class VideoFrame:
@@ -122,10 +123,22 @@ class VideoProcessor:
         frames = await self._extract_frames(video_path)
         print(f"✓ Extracted {len(frames)} frames")
 
-        # Step 2: Analyze frames with Gemini to detect actions
+        # Step 2: Analyze frames with Gemini to detect actions and extract metadata
         print("🤖 Analyzing video with Gemini...")
-        detected_actions = await self._analyze_video_with_gemini(frames, starting_url)
-        print(f"✓ Detected {len(detected_actions)} actions")
+        analysis_result = await self._analyze_video_with_gemini(frames, starting_url)
+        print(f"✓ Detected {len(analysis_result.actions)} actions")
+        
+        # Use Gemini-extracted metadata if not provided by user
+        final_workflow_name = workflow_name
+        final_workflow_description = workflow_description
+        
+        if not workflow_name and analysis_result.workflow_name:
+            final_workflow_name = analysis_result.workflow_name
+            print(f"  ℹ️  Using AI-extracted workflow name: {final_workflow_name}")
+        
+        if not workflow_description and analysis_result.workflow_description:
+            final_workflow_description = analysis_result.workflow_description
+            print(f"  ℹ️  Using AI-extracted description: {final_workflow_description}")
 
         # Step 3: Get video metadata
         video_metadata = await self._get_video_metadata(video_path)
@@ -133,10 +146,10 @@ class VideoProcessor:
         # Step 4: Generate WorkflowInput
         print("📝 Generating WorkflowInput...")
         workflow_input = self._generate_workflow_input(
-            workflow_name=workflow_name,
-            workflow_description=workflow_description,
+            workflow_name=final_workflow_name,
+            workflow_description=final_workflow_description,
             starting_url=starting_url,
-            actions=detected_actions,
+            actions=analysis_result.actions,
             video_metadata=video_metadata,
             frames=frames,
         )
@@ -275,9 +288,9 @@ class VideoProcessor:
 
     async def _analyze_video_with_gemini(
         self, frames: list[VideoFrame], starting_url: str
-    ) -> list[VisualWorkflowAction]:
+    ) -> VideoAnalysisResult:
         """
-        Analyze video frames using Gemini to detect user actions.
+        Analyze video frames using Gemini to detect user actions and extract workflow metadata.
         Uses structured output with Pydantic models for reliable JSON extraction.
 
         Args:
@@ -285,7 +298,7 @@ class VideoProcessor:
             starting_url: Starting URL of the workflow
 
         Returns:
-            List of VisualWorkflowAction objects (timestamps generated later)
+            VideoAnalysisResult with actions, workflow_name, and workflow_description
         """
         # Prepare frames for Gemini (limit to avoid token limits)
         # Use key frames: first, last, and evenly distributed middle frames
@@ -316,11 +329,13 @@ class VideoProcessor:
         try:
             result: VideoAnalysisResult = await self.llm_structured.ainvoke([message])
             
-            if result.summary:
-                print(f"  Summary: {result.summary}")
+            if result.workflow_name:
+                print(f"  Workflow name: {result.workflow_name}")
+            if result.workflow_description:
+                print(f"  Workflow description: {result.workflow_description}")
             
-            # Return VisualWorkflowAction objects directly
-            return result.actions
+            # Return full VideoAnalysisResult
+            return result
         except Exception as e:
             print(f"⚠️ Structured output failed: {e}")
             print(f"  Error details: {str(e)}")
@@ -340,7 +355,8 @@ class VideoProcessor:
                     print(f"⚠️ Failed to parse action: {parse_error}")
                     continue
             
-            return actions
+            # Return VideoAnalysisResult (without metadata in fallback mode)
+            return VideoAnalysisResult(actions=actions)
 
     def _select_key_frames(self, frames: list[VideoFrame], max_frames: int) -> list[VideoFrame]:
         """
@@ -382,9 +398,16 @@ I'm providing you with {num_frames} key frames from this video in chronological 
 
 ## Your Task:
 
-Analyze the frames to identify user actions by comparing consecutive frames and detecting changes.
+1. **Understand the workflow** - What is the user trying to accomplish?
+2. **Identify user actions** - Analyze frames to detect specific user interactions
 
-## Action Types to Detect:
+## First, provide workflow metadata:
+- **workflow_name**: A short, descriptive name for this workflow (e.g., "Login flow", "Checkout process", "Search and filter")
+- **workflow_description**: A brief 1-2 sentence description of what the user accomplishes in this workflow
+
+## Then, identify all user actions:
+
+### Action Types to Detect:
 - **click**: Mouse clicks on buttons, links, navigation items
 - **type**: Text input into form fields
 - **navigate**: Page navigation (URL changes, new pages loading)
@@ -393,7 +416,7 @@ Analyze the frames to identify user actions by comparing consecutive frames and 
 - **hover**: Hover effects (if clearly visible)
 - **wait**: Explicit waiting for content to load
 
-## For Each Action Provide:
+### For Each Action Provide:
 
 1. **action_type**: One of the types above
 2. **description**: Clear, concise description of what the user did
@@ -414,13 +437,7 @@ Analyze the frames to identify user actions by comparing consecutive frames and 
 - Infer text input from visible form field changes
 - Order actions chronologically based on the frame sequence
 
-## Example Output Structure:
-
-The function will return a structured response with:
-- A list of actions (each with the fields above)
-- An optional summary of the workflow
-
-Analyze the frames now and identify all significant user actions."""
+Analyze the frames now and provide the workflow metadata and all significant user actions."""
 
     def _parse_gemini_response(
         self, response_text: str, frames: list[VideoFrame]
@@ -545,9 +562,8 @@ Analyze the frames now and identify all significant user actions."""
             time_per_action = video_duration_sec
 
         for idx, visual_action in enumerate(actions):
-            # Auto-generate timestamp based on position in sequence
+            # Calculate time for screenshot selection
             seconds = idx * time_per_action
-            action_time = base_time + timedelta(seconds=seconds)
 
             # Save screenshot for this action if available
             screenshot_path = None
@@ -563,9 +579,8 @@ Analyze the frames now and identify all significant user actions."""
                 with open(screenshot_path, "wb") as f:
                     f.write(closest_frame.image)
 
-            # Create WorkflowAction from VisualWorkflowAction
+            # Create WorkflowAction from VisualWorkflowAction (without timestamp)
             workflow_action = WorkflowAction(
-                timestamp=action_time.isoformat(),
                 action_type=visual_action.action_type,
                 description=visual_action.description,
                 screenshot_url=screenshot_path,

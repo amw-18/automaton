@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+from typing import Optional
 from models.session import session_manager
 from services.video_service import video_service
 
@@ -7,8 +8,8 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 class ProcessVideoRequest(BaseModel):
     starting_url: str
-    workflow_name: str
-    workflow_description: str
+    workflow_name: Optional[str] = None
+    workflow_description: Optional[str] = None
 
 @router.get("/{session_id}")
 async def get_session(session_id: str):
@@ -18,13 +19,6 @@ async def get_session(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Debug logging
-    print(f"DEBUG: Session {session_id}")
-    print(f"  Status: {session.status}")
-    print(f"  Workflow: {session.workflow}")
-    if session.workflow:
-        print(f"  Actions count: {len(session.workflow.actions)}")
-    
     return {
         "sessionId": session.id,
         "status": session.status,
@@ -32,6 +26,22 @@ async def get_session(session_id: str):
         "workflowActions": len(session.workflow.actions) if session.workflow else 0,
         "createdAt": session.created_at.isoformat()
     }
+
+@router.get("/{session_id}/workflow")
+async def get_workflow(session_id: str):
+    """
+    Get the processed workflow JSON for a session
+    """
+    session = session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if not session.workflow:
+        raise HTTPException(status_code=404, detail="Workflow not yet processed")
+    
+    # Return the workflow as JSON
+    return session.workflow.model_dump()
 
 @router.post("/{session_id}/process")
 async def process_video(

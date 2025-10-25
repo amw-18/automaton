@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { getSessionApiSessionsSessionIdGet, processVideoApiSessionsSessionIdProcessPost } from '@/lib/api-client';
+import { getSessionApiSessionsSessionIdGet, processVideoApiSessionsSessionIdProcessPost, getWorkflowApiSessionsSessionIdWorkflowGet } from '@/lib/api-client';
 import { useWebSocket, WebSocketMessage } from '@/lib/useWebSocket';
 
 interface Session {
@@ -22,6 +22,8 @@ export default function SessionPage() {
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const [processing, setProcessing] = useState(false);
   const [showProcessForm, setShowProcessForm] = useState(false);
+  const [showArtifact, setShowArtifact] = useState(false);
+  const [workflowJson, setWorkflowJson] = useState<any>(null);
   const [formData, setFormData] = useState({
     startingUrl: 'https://example.com',
     workflowName: '',
@@ -88,8 +90,8 @@ export default function SessionPage() {
         },
         body: {
           starting_url: formData.startingUrl,
-          workflow_name: formData.workflowName,
-          workflow_description: formData.workflowDescription
+          workflow_name: formData.workflowName || undefined,
+          workflow_description: formData.workflowDescription || undefined
         }
       });
       
@@ -99,6 +101,26 @@ export default function SessionPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Processing failed');
       setProcessing(false);
+    }
+  };
+
+  const handleViewArtifact = async () => {
+    try {
+      // Use generated API client
+      const { data, error: apiError } = await getWorkflowApiSessionsSessionIdWorkflowGet({
+        path: {
+          session_id: sessionId
+        }
+      });
+      
+      if (apiError) {
+        throw new Error('Failed to fetch workflow');
+      }
+      
+      setWorkflowJson(data);
+      setShowArtifact(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load workflow');
     }
   };
 
@@ -122,8 +144,8 @@ export default function SessionPage() {
   const isProcessed = session?.status === 'processed';
 
   return (
-    <main className="min-h-screen p-8 md:p-24">
-      <div className="max-w-4xl mx-auto">
+    <main className={showArtifact ? "h-screen flex" : "min-h-screen p-8 md:p-24"}>
+      <div className={showArtifact ? "w-1/2 overflow-y-auto p-8 md:p-24" : "max-w-4xl mx-auto"}>
         <h1 className="text-3xl font-bold mb-2">Session</h1>
         <p className="text-sm text-gray-500 mb-8 font-mono">{sessionId}</p>
         
@@ -209,34 +231,32 @@ export default function SessionPage() {
 
               <div>
                 <label htmlFor="workflowName" className="block text-sm font-medium text-gray-700 mb-1">
-                  Workflow Name *
+                  Workflow Name <span className="text-gray-400 text-xs">(optional)</span>
                 </label>
                 <input
                   type="text"
                   id="workflowName"
-                  required
                   value={formData.workflowName}
                   onChange={(e) => setFormData({ ...formData, workflowName: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Login workflow"
+                  placeholder="Leave empty to auto-extract from video"
                 />
-                <p className="text-xs text-gray-500 mt-1">A short name for this workflow</p>
+                <p className="text-xs text-gray-500 mt-1">AI will extract from video if not provided</p>
               </div>
 
               <div>
                 <label htmlFor="workflowDescription" className="block text-sm font-medium text-gray-700 mb-1">
-                  Workflow Description *
+                  Workflow Description <span className="text-gray-400 text-xs">(optional)</span>
                 </label>
                 <textarea
                   id="workflowDescription"
-                  required
                   rows={3}
                   value={formData.workflowDescription}
                   onChange={(e) => setFormData({ ...formData, workflowDescription: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Describe what this workflow does..."
+                  placeholder="Leave empty to auto-extract from video"
                 />
-                <p className="text-xs text-gray-500 mt-1">Describe the purpose of this workflow</p>
+                <p className="text-xs text-gray-500 mt-1">AI will extract from video if not provided</p>
               </div>
 
               <div className="flex gap-3">
@@ -263,12 +283,15 @@ export default function SessionPage() {
         {isProcessed && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
             <h3 className="font-semibold text-green-800 mb-2">✅ Video Processed</h3>
-            <p className="text-green-700 text-sm">
+            <p className="text-green-700 text-sm mb-3">
               Detected {session?.workflowActions} actions. Ready to generate test script.
             </p>
-            <p className="text-xs text-green-600 mt-2">
-              (Test script generation will be implemented in the next task)
-            </p>
+            <button
+              onClick={handleViewArtifact}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            >
+              📄 View Workflow Artifact
+            </button>
           </div>
         )}
 
@@ -308,6 +331,27 @@ export default function SessionPage() {
           </div>
         </div>
       </div>
+
+      {/* Full-height Workflow Artifact Viewer */}
+      {showArtifact && (
+        <div className="w-1/2 h-screen overflow-y-auto bg-gray-900 text-gray-100 p-8">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-semibold">Workflow Artifact</h2>
+            <button
+              onClick={() => setShowArtifact(false)}
+              className="text-gray-400 hover:text-white text-3xl leading-none font-light"
+              title="Close artifact view"
+            >
+              ×
+            </button>
+          </div>
+          <div className="bg-gray-800 rounded-lg p-6 overflow-auto">
+            <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap break-words">
+              {workflowJson ? JSON.stringify(workflowJson, null, 2) : 'Loading...'}
+            </pre>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

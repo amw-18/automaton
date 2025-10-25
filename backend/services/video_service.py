@@ -70,10 +70,7 @@ class VideoService:
             print(f"✅ Workflow saved to: {workflow_path}")
             
             # Update session
-            print(f"🔧 Setting workflow on session (actions count: {len(workflow.actions)})")
             session.workflow = workflow
-            print(f"🔧 Workflow set. Verifying: {session.workflow is not None}")
-            print(f"🔧 Session workflow actions: {len(session.workflow.actions) if session.workflow else 'None'}")
             session_manager.update_status(session_id, "processed")
             
             await stream_manager.broadcast_status(
