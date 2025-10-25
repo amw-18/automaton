@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
+from pathlib import Path
 from models.session import session_manager
 from services.video_service import video_service
 from services.agent_service import agent_service
+from services.cleanup_service import cleanup_service
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -103,4 +105,39 @@ async def start_agent(session_id: str, background_tasks: BackgroundTasks):
         "sessionId": session_id,
         "status": "running",
         "message": "Agent execution started"
+    }
+
+@router.post("/cleanup")
+async def manual_cleanup():
+    """Manually trigger session cleanup"""
+    deleted_count = await cleanup_service.cleanup_old_sessions()
+    return {
+        "message": f"Cleanup complete. Deleted {deleted_count} session(s)",
+        "deletedCount": deleted_count
+    }
+
+@router.get("/stats")
+async def get_stats():
+    """Get system statistics"""
+    total_sessions = len(session_manager.sessions)
+    uploads_dir = Path("uploads")
+    
+    # Calculate total disk usage
+    total_size = 0
+    if uploads_dir.exists():
+        for session_dir in uploads_dir.iterdir():
+            if session_dir.is_dir():
+                for file in session_dir.rglob('*'):
+                    if file.is_file():
+                        total_size += file.stat().st_size
+    
+    # Count by status
+    status_counts = {}
+    for session in session_manager.sessions.values():
+        status_counts[session.status] = status_counts.get(session.status, 0) + 1
+    
+    return {
+        "totalSessions": total_sessions,
+        "diskUsageMB": round(total_size / (1024 * 1024), 2),
+        "statusCounts": status_counts
     }

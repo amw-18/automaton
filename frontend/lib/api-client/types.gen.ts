@@ -195,6 +195,34 @@ export type StartAgentApiSessionsSessionIdStartPostResponses = {
     200: unknown;
 };
 
+export type ManualCleanupApiSessionsCleanupPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sessions/cleanup';
+};
+
+export type ManualCleanupApiSessionsCleanupPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetStatsApiSessionsStatsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sessions/stats';
+};
+
+export type GetStatsApiSessionsStatsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetScreenshotApiScreenshotsSessionIdFilenameGetData = {
     body?: never;
     path: {

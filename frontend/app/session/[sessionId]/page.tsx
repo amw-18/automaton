@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { getSessionApiSessionsSessionIdGet, processVideoApiSessionsSessionIdProcessPost, getWorkflowApiSessionsSessionIdWorkflowGet } from '@/lib/api-client';
 import { useWebSocket, WebSocketMessage } from '@/lib/useWebSocket';
 import ScreenshotStream from '@/components/ScreenshotStream';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import StatusBadge from '@/components/StatusBadge';
 
 interface Session {
   sessionId: string;
@@ -181,7 +183,10 @@ export default function SessionPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="text-xl">Loading session...</div>
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-gray-600">Loading session...</p>
+        </div>
       </div>
     );
   }
@@ -200,8 +205,13 @@ export default function SessionPage() {
   return (
     <main className={showArtifact ? "h-screen flex" : "min-h-screen p-8 md:p-24"}>
       <div className={showArtifact ? "w-1/2 overflow-y-auto p-8 md:p-24" : "max-w-4xl mx-auto"}>
-        <h1 className="text-3xl font-bold mb-2">Session</h1>
-        <p className="text-sm text-gray-500 mb-8 font-mono">{sessionId}</p>
+        <div className="mb-8">
+          <a href="/" className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1">
+            ← Back to Home
+          </a>
+          <h1 className="text-3xl font-bold mt-2">Session</h1>
+          <p className="text-sm text-gray-500 font-mono">{sessionId}</p>
+        </div>
         
         {/* Connection Status */}
         <div className="mb-6 flex items-center gap-2">
@@ -214,18 +224,10 @@ export default function SessionPage() {
         {/* Session Details */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Session Details</h2>
-          <div className="space-y-2 text-sm">
-            <div className="flex">
-              <span className="font-medium w-32">Status:</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                session?.status === 'uploaded' ? 'bg-blue-100 text-blue-800' :
-                session?.status === 'processing' ? 'bg-yellow-100 text-yellow-800' :
-                session?.status === 'processed' ? 'bg-green-100 text-green-800' :
-                session?.status === 'error' ? 'bg-red-100 text-red-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {session?.status}
-              </span>
+          <div className="space-y-3">
+            <div>
+              <div className="text-sm text-gray-500 mb-1">Status</div>
+              <StatusBadge status={session?.status || 'created'} />
             </div>
             <div className="flex">
               <span className="font-medium w-32">Created:</span>
@@ -244,6 +246,18 @@ export default function SessionPage() {
               </div>
             )}
           </div>
+          
+          {/* Workflow Artifact Button - Always visible if workflow exists */}
+          {session?.workflowActions && session.workflowActions > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={handleViewArtifact}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors w-full"
+              >
+                📄 View Workflow Artifact
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}
@@ -340,21 +354,13 @@ export default function SessionPage() {
             <p className="text-green-700 text-sm mb-3">
               Detected {session?.workflowActions} actions. Ready to generate test script.
             </p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleViewArtifact}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              >
-                📄 View Workflow Artifact
-              </button>
-              <button
-                onClick={handleStartAgent}
-                disabled={running}
-                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              >
-                {running ? '🤖 Agent Running...' : '🚀 Start Agent'}
-              </button>
-            </div>
+            <button
+              onClick={handleStartAgent}
+              disabled={running}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            >
+              {running ? '🤖 Agent Running...' : '🚀 Start Agent'}
+            </button>
           </div>
         )}
         
@@ -372,6 +378,21 @@ export default function SessionPage() {
             >
               📥 Download Test Script
             </a>
+          </div>
+        )}
+
+        {/* Agent Running Progress */}
+        {running && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <LoadingSpinner size="sm" />
+              <div>
+                <div className="font-medium text-blue-800">Agent Running</div>
+                <div className="text-sm text-blue-600">
+                  Generating test script... {screenshots.length} screenshots captured
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

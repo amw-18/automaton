@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetScreenshotApiScreenshotsSessionIdFilenameGetData, GetScreenshotApiScreenshotsSessionIdFilenameGetErrors, GetScreenshotApiScreenshotsSessionIdFilenameGetResponses, GetScriptApiScriptsSessionIdTestPyGetData, GetScriptApiScriptsSessionIdTestPyGetErrors, GetScriptApiScriptsSessionIdTestPyGetResponses, GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, StartAgentApiSessionsSessionIdStartPostData, StartAgentApiSessionsSessionIdStartPostErrors, StartAgentApiSessionsSessionIdStartPostResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
+import type { GetScreenshotApiScreenshotsSessionIdFilenameGetData, GetScreenshotApiScreenshotsSessionIdFilenameGetErrors, GetScreenshotApiScreenshotsSessionIdFilenameGetResponses, GetScriptApiScriptsSessionIdTestPyGetData, GetScriptApiScriptsSessionIdTestPyGetErrors, GetScriptApiScriptsSessionIdTestPyGetResponses, GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetStatsApiSessionsStatsGetData, GetStatsApiSessionsStatsGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ManualCleanupApiSessionsCleanupPostData, ManualCleanupApiSessionsCleanupPostResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, StartAgentApiSessionsSessionIdStartPostData, StartAgentApiSessionsSessionIdStartPostErrors, StartAgentApiSessionsSessionIdStartPostResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -85,6 +85,30 @@ export const processVideoApiSessionsSessionIdProcessPost = <ThrowOnError extends
 export const startAgentApiSessionsSessionIdStartPost = <ThrowOnError extends boolean = false>(options: Options<StartAgentApiSessionsSessionIdStartPostData, ThrowOnError>) => {
     return (options.client ?? client).post<StartAgentApiSessionsSessionIdStartPostResponses, StartAgentApiSessionsSessionIdStartPostErrors, ThrowOnError>({
         url: '/api/sessions/{session_id}/start',
+        ...options
+    });
+};
+
+/**
+ * Manual Cleanup
+ *
+ * Manually trigger session cleanup
+ */
+export const manualCleanupApiSessionsCleanupPost = <ThrowOnError extends boolean = false>(options?: Options<ManualCleanupApiSessionsCleanupPostData, ThrowOnError>) => {
+    return (options?.client ?? client).post<ManualCleanupApiSessionsCleanupPostResponses, unknown, ThrowOnError>({
+        url: '/api/sessions/cleanup',
+        ...options
+    });
+};
+
+/**
+ * Get Stats
+ *
+ * Get system statistics
+ */
+export const getStatsApiSessionsStatsGet = <ThrowOnError extends boolean = false>(options?: Options<GetStatsApiSessionsStatsGetData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetStatsApiSessionsStatsGetResponses, unknown, ThrowOnError>({
+        url: '/api/sessions/stats',
         ...options
     });
 };
