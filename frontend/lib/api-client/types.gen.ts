@@ -167,6 +167,94 @@ export type ProcessVideoApiSessionsSessionIdProcessPostResponses = {
     200: unknown;
 };
 
+export type StartAgentApiSessionsSessionIdStartPostData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/sessions/{session_id}/start';
+};
+
+export type StartAgentApiSessionsSessionIdStartPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StartAgentApiSessionsSessionIdStartPostError = StartAgentApiSessionsSessionIdStartPostErrors[keyof StartAgentApiSessionsSessionIdStartPostErrors];
+
+export type StartAgentApiSessionsSessionIdStartPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetScreenshotApiScreenshotsSessionIdFilenameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+        /**
+         * Filename
+         */
+        filename: string;
+    };
+    query?: never;
+    url: '/api/screenshots/{session_id}/{filename}';
+};
+
+export type GetScreenshotApiScreenshotsSessionIdFilenameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScreenshotApiScreenshotsSessionIdFilenameGetError = GetScreenshotApiScreenshotsSessionIdFilenameGetErrors[keyof GetScreenshotApiScreenshotsSessionIdFilenameGetErrors];
+
+export type GetScreenshotApiScreenshotsSessionIdFilenameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetScriptApiScriptsSessionIdTestPyGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/scripts/{session_id}/test.py';
+};
+
+export type GetScriptApiScriptsSessionIdTestPyGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetScriptApiScriptsSessionIdTestPyGetError = GetScriptApiScriptsSessionIdTestPyGetErrors[keyof GetScriptApiScriptsSessionIdTestPyGetErrors];
+
+export type GetScriptApiScriptsSessionIdTestPyGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type RootGetData = {
     body?: never;
     path?: never;

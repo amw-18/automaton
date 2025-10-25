@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from models.session import session_manager
 from services.video_service import video_service
+from services.agent_service import agent_service
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -24,6 +25,7 @@ async def get_session(session_id: str):
         "status": session.status,
         "videoPath": session.video_path,
         "workflowActions": len(session.workflow.actions) if session.workflow else 0,
+        "scriptPath": session.script_path,
         "createdAt": session.created_at.isoformat()
     }
 
@@ -78,4 +80,27 @@ async def process_video(
         "sessionId": session_id,
         "status": "processing",
         "message": "Video processing started"
+    }
+
+@router.post("/{session_id}/start")
+async def start_agent(session_id: str, background_tasks: BackgroundTasks):
+    """Start agent execution to generate test script"""
+    session = session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    if session.status != "processed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot start agent. Current status: {session.status}. Video must be processed first."
+        )
+    
+    # Run agent in background
+    background_tasks.add_task(agent_service.run_agent, session_id)
+    
+    return {
+        "sessionId": session_id,
+        "status": "running",
+        "message": "Agent execution started"
     }

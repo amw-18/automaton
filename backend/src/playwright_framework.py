@@ -77,7 +77,13 @@ class PlaywrightToolkit:
     Manages browser lifecycle and provides tool definitions.
     """
     
-    def __init__(self, headless: bool = False, browser_type: str = "chromium", use_vision: bool = True):
+    def __init__(
+        self, 
+        headless: bool = False, 
+        browser_type: str = "chromium", 
+        use_vision: bool = True,
+        screenshot_dir: str = "screenshots"
+    ):
         self.headless = headless
         self.browser_type = browser_type
         self.browser: Optional[Browser] = None
@@ -95,13 +101,21 @@ class PlaywrightToolkit:
         self.current_elements: list[ElementInfo] = []  # Current labeled elements on page
         self.last_screenshot_path: Optional[str] = None
         
+        # Screenshot directory and callback
+        self.screenshot_dir = screenshot_dir
+        self.screenshot_callback: Optional[Callable[[str], Any]] = None
+        
         # Create screenshots directory if using vision
         if self.use_vision:
-            os.makedirs("screenshots", exist_ok=True)
+            os.makedirs(self.screenshot_dir, exist_ok=True)
         
         # Tool registry
         self.tools: dict[str, Tool] = {}
         self._register_tools()
+    
+    def set_screenshot_callback(self, callback: Callable[[str], Any]):
+        """Set callback to be called after each screenshot"""
+        self.screenshot_callback = callback
     
     def _register_tools(self):
         """Register all available tools."""
@@ -503,7 +517,7 @@ Key Elements Present:
             raise RuntimeError("Vision labeling is not enabled.")
         
         # Ensure screenshots directory exists
-        os.makedirs("screenshots", exist_ok=True)
+        os.makedirs(self.screenshot_dir, exist_ok=True)
         print(f"📸 Capturing labeled screenshot...")
         
         try:
@@ -513,12 +527,28 @@ Key Elements Present:
                 output_path=None  # Will auto-generate path
             )
             
+            # Move screenshot to custom directory if needed
+            if self.screenshot_dir != "screenshots":
+                from pathlib import Path
+                import shutil
+                screenshot_filename = Path(screenshot_path).name
+                new_path = f"{self.screenshot_dir}/{screenshot_filename}"
+                shutil.move(screenshot_path, new_path)
+                screenshot_path = new_path
+            
             print(f"📸 Screenshot saved to: {screenshot_path}")
             print(f"📸 Found {len(elements)} interactive elements")
             
             # Store current elements
             self.current_elements = elements
             self.last_screenshot_path = screenshot_path
+            
+            # Call callback if set
+            if self.screenshot_callback:
+                result = self.screenshot_callback(screenshot_path)
+                # Handle both sync and async callbacks
+                if asyncio.iscoroutine(result):
+                    await result
             
             # Format element list for LLM
             elements_text = self.vision_labeler.format_elements_for_llm(elements)
@@ -1083,8 +1113,11 @@ Python code: await page.wait_for_timeout({int(seconds * 1000)})
         
         return output
     
-    async def _switch_to_tab(self, tab_index: int) -> str:
+    async def _switch_to_tab(self, tab_index: int | float) -> str:
         """Switch to a different tab by index."""
+        # Convert to int if float (LLM sometimes passes floats)
+        tab_index = int(tab_index)
+        
         if not self.context:
             raise RuntimeError("Browser context not initialized. Call initialize() first.")
         
@@ -1169,8 +1202,11 @@ Python code:
 
 💡 TIP: Use navigate_to_url to go to a specific URL, then capture_labeled_screenshot."""
     
-    async def _close_tab(self, tab_index: int) -> str:
+    async def _close_tab(self, tab_index: int | float) -> str:
         """Close a specific tab by index."""
+        # Convert to int if float (LLM sometimes passes floats)
+        tab_index = int(tab_index)
+        
         if not self.context:
             raise RuntimeError("Browser context not initialized. Call initialize() first.")
         

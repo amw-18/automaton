@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
+import type { GetScreenshotApiScreenshotsSessionIdFilenameGetData, GetScreenshotApiScreenshotsSessionIdFilenameGetErrors, GetScreenshotApiScreenshotsSessionIdFilenameGetResponses, GetScriptApiScriptsSessionIdTestPyGetData, GetScriptApiScriptsSessionIdTestPyGetErrors, GetScriptApiScriptsSessionIdTestPyGetResponses, GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, StartAgentApiSessionsSessionIdStartPostData, StartAgentApiSessionsSessionIdStartPostErrors, StartAgentApiSessionsSessionIdStartPostResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -74,6 +74,42 @@ export const processVideoApiSessionsSessionIdProcessPost = <ThrowOnError extends
             'Content-Type': 'application/json',
             ...options.headers
         }
+    });
+};
+
+/**
+ * Start Agent
+ *
+ * Start agent execution to generate test script
+ */
+export const startAgentApiSessionsSessionIdStartPost = <ThrowOnError extends boolean = false>(options: Options<StartAgentApiSessionsSessionIdStartPostData, ThrowOnError>) => {
+    return (options.client ?? client).post<StartAgentApiSessionsSessionIdStartPostResponses, StartAgentApiSessionsSessionIdStartPostErrors, ThrowOnError>({
+        url: '/api/sessions/{session_id}/start',
+        ...options
+    });
+};
+
+/**
+ * Get Screenshot
+ *
+ * Serve screenshot files
+ */
+export const getScreenshotApiScreenshotsSessionIdFilenameGet = <ThrowOnError extends boolean = false>(options: Options<GetScreenshotApiScreenshotsSessionIdFilenameGetData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetScreenshotApiScreenshotsSessionIdFilenameGetResponses, GetScreenshotApiScreenshotsSessionIdFilenameGetErrors, ThrowOnError>({
+        url: '/api/screenshots/{session_id}/{filename}',
+        ...options
+    });
+};
+
+/**
+ * Get Script
+ *
+ * Serve generated test script
+ */
+export const getScriptApiScriptsSessionIdTestPyGet = <ThrowOnError extends boolean = false>(options: Options<GetScriptApiScriptsSessionIdTestPyGetData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetScriptApiScriptsSessionIdTestPyGetResponses, GetScriptApiScriptsSessionIdTestPyGetErrors, ThrowOnError>({
+        url: '/api/scripts/{session_id}/test.py',
+        ...options
     });
 };
 

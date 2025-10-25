@@ -208,15 +208,23 @@ class WorkflowAgent:
             else:
                 workflow_data = workflow
             
-            # Initialize state
+            # Initialize state with all required fields
             initial_state = {
                 "workflow_json": workflow_data,
                 "workflow_name": "",
                 "starting_url": "",
-                "execution_state": {},
+                "execution_state": {
+                    "current_action_index": 0,
+                    "total_actions": 0,
+                    "actions_executed": [],
+                    "actions_failed": [],
+                    "observations": [],
+                    "script_generated": False,
+                    "script_path": None,
+                },
                 "test_script_content": "",
                 "output_file_path": output_path,
-                "messages": [],
+                "messages": [],  # Will be populated by parse_workflow_node
                 "next_step": None,
                 "error": None,
                 "retry_count": 0,

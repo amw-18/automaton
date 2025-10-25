@@ -64,11 +64,14 @@ Your task:
 Let's begin!"""
         )
         
+        messages_to_return = [SystemMessage(content=SYSTEM_PROMPT), initial_message]
+        print(f"📋 Parse complete. Returning {len(messages_to_return)} messages")
+        
         return {
             "workflow_name": workflow_name,
             "starting_url": starting_url,
             "execution_state": execution_state,
-            "messages": [SystemMessage(content=SYSTEM_PROMPT), initial_message],
+            "messages": messages_to_return,
             "next_step": "execute",
             "error": None,
         }
@@ -234,12 +237,15 @@ def create_agent_node(model_with_tools):
     
     def agent_node(state: AgentState) -> dict:
         """Agent reasoning and decision making."""
-        messages = state["messages"]
+        messages = state.get("messages", [])
         execution_state = state.get("execution_state", {})
+        
+        print(f"🤖 Agent node received {len(messages)} messages")
         
         # Validate messages list
         if not messages:
             print("⚠️  Warning: Empty messages list in agent_node")
+            print(f"   State keys: {list(state.keys())}")
             return {"messages": [], "error": "Empty messages list"}
         
         # Filter out any None or empty messages

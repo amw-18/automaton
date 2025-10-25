@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 
 # Import routers
-from routers import videos, sessions, websocket
+from routers import videos, sessions, websocket, static
 
 load_dotenv()
 
@@ -23,6 +23,7 @@ app.add_middleware(
 app.include_router(videos.router)
 app.include_router(sessions.router)
 app.include_router(websocket.router)
+app.include_router(static.router)
 
 @app.get("/")
 async def root():

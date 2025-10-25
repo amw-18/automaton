@@ -1,3 +1,3 @@
-from . import videos, sessions, websocket
+from . import videos, sessions, websocket, static
 
-__all__ = ["videos", "sessions", "websocket"]
+__all__ = ["videos", "sessions", "websocket", "static"]

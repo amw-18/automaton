@@ -93,8 +93,10 @@ class WorkflowAction(BaseModel):
 
     @field_validator("timestamp")
     @classmethod
-    def validate_timestamp(cls, v: str) -> str:
+    def validate_timestamp(cls, v: Optional[str]) -> Optional[str]:
         """Validate ISO 8601 timestamp format."""
+        if v is None:
+            return v
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
         except ValueError:
@@ -126,9 +128,11 @@ class WorkflowMetadata(BaseModel):
     @classmethod
     def validate_created_at(cls, v: str) -> str:
         """Validate ISO 8601 timestamp format."""
+        if not v:
+            raise ValueError("created_at cannot be empty")
         try:
             datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except ValueError:
+        except (ValueError, AttributeError) as e:
             raise ValueError(f"Invalid ISO 8601 timestamp: {v}")
         return v
 

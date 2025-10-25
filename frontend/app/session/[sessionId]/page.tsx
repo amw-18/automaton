@@ -4,13 +4,20 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { getSessionApiSessionsSessionIdGet, processVideoApiSessionsSessionIdProcessPost, getWorkflowApiSessionsSessionIdWorkflowGet } from '@/lib/api-client';
 import { useWebSocket, WebSocketMessage } from '@/lib/useWebSocket';
+import ScreenshotStream from '@/components/ScreenshotStream';
 
 interface Session {
   sessionId: string;
   status: string;
   videoPath: string;
   workflowActions: number;
+  scriptPath?: string;
   createdAt: string;
+}
+
+interface Screenshot {
+  url: string;
+  timestamp: string;
 }
 
 export default function SessionPage() {
@@ -21,9 +28,11 @@ export default function SessionPage() {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [running, setRunning] = useState(false);
   const [showProcessForm, setShowProcessForm] = useState(false);
   const [showArtifact, setShowArtifact] = useState(false);
   const [workflowJson, setWorkflowJson] = useState<any>(null);
+  const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [formData, setFormData] = useState({
     startingUrl: 'https://example.com',
     workflowName: '',
@@ -71,9 +80,33 @@ export default function SessionPage() {
           // Refetch session to get updated workflow action count
           loadSession();
         }
+        
+        if (newStatus === 'complete' || newStatus === 'error') {
+          setRunning(false);
+        }
+      }
+      
+      // Handle screenshot messages
+      if (lastMessage.type === 'screenshot' && lastMessage.imageUrl) {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        setScreenshots(prev => [
+          ...prev,
+          {
+            url: `${apiUrl}${lastMessage.imageUrl}`,
+            timestamp: lastMessage.timestamp || new Date().toISOString()
+          }
+        ]);
+      }
+      
+      // Handle completion
+      if (lastMessage.type === 'complete') {
+        if (lastMessage.success && lastMessage.scriptPath) {
+          setSession(prev => prev ? { ...prev, scriptPath: lastMessage.scriptPath, status: 'complete' } : null);
+        }
+        setRunning(false);
       }
     }
-  }, [lastMessage]);
+  }, [lastMessage, loadSession]);
 
   const handleProcessVideo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,6 +154,27 @@ export default function SessionPage() {
       setShowArtifact(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load workflow');
+    }
+  };
+
+  const handleStartAgent = async () => {
+    try {
+      setRunning(true);
+      setError(null);
+      
+      // TODO: Replace with generated API client after regeneration
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/sessions/${sessionId}/start`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to start agent');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start agent');
+      setRunning(false);
     }
   };
 
@@ -286,12 +340,38 @@ export default function SessionPage() {
             <p className="text-green-700 text-sm mb-3">
               Detected {session?.workflowActions} actions. Ready to generate test script.
             </p>
-            <button
-              onClick={handleViewArtifact}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            <div className="flex gap-3">
+              <button
+                onClick={handleViewArtifact}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                📄 View Workflow Artifact
+              </button>
+              <button
+                onClick={handleStartAgent}
+                disabled={running}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                {running ? '🤖 Agent Running...' : '🚀 Start Agent'}
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Agent Complete */}
+        {session?.status === 'complete' && session.scriptPath && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <h3 className="font-semibold text-blue-800 mb-2">🎉 Test Script Generated!</h3>
+            <p className="text-blue-700 text-sm mb-3">
+              Agent completed successfully. Your Playwright test script is ready.
+            </p>
+            <a
+              href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/scripts/${sessionId}/test.py`}
+              download
+              className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
             >
-              📄 View Workflow Artifact
-            </button>
+              📥 Download Test Script
+            </a>
           </div>
         )}
 
@@ -299,6 +379,14 @@ export default function SessionPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <p className="text-red-800 text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Screenshot Stream */}
+        {screenshots.length > 0 && (
+          <div className="bg-white shadow rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Agent Progress</h2>
+            <ScreenshotStream screenshots={screenshots} />
           </div>
         )}
 
