@@ -153,6 +153,70 @@ class PlaywrightToolkit:
                 ],
                 handler=self._type_into_label
             ))
+            
+            self.register_tool(Tool(
+                name="hover_label",
+                description="Hover over an element by its label number (from the labeled screenshot). Use this to trigger hover effects like dropdown menus.",
+                parameters=[
+                    ToolParameter(name="label", type="number", description="The label number of the element to hover over")
+                ],
+                handler=self._hover_label
+            ))
+            
+            self.register_tool(Tool(
+                name="select_from_label",
+                description="Select an option from a dropdown by its label number. Use this for <select> dropdowns or similar selection elements.",
+                parameters=[
+                    ToolParameter(name="label", type="number", description="The label number of the dropdown/select element"),
+                    ToolParameter(name="value", type="string", description="The value to select (can be text or value attribute)", required=False),
+                    ToolParameter(name="index", type="number", description="Or select by index (0-based)", required=False)
+                ],
+                handler=self._select_from_label
+            ))
+            
+            self.register_tool(Tool(
+                name="wait_for_seconds",
+                description="Wait for a specified number of seconds. Use this when you need to wait for content to load or animations to complete.",
+                parameters=[
+                    ToolParameter(name="seconds", type="number", description="Number of seconds to wait")
+                ],
+                handler=self._wait_for_seconds
+            ))
+        
+        # Tab/Page management tools
+        self.register_tool(Tool(
+            name="get_context_info",
+            description="Get information about all open tabs/pages in the browser context. Returns a list of tabs with their index, URL, and title.",
+            parameters=[],
+            handler=self._get_context_info
+        ))
+        
+        self.register_tool(Tool(
+            name="switch_to_tab",
+            description="Switch to a different tab/page by its index (from get_context_info). After switching, you must call capture_labeled_screenshot to see the new page.",
+            parameters=[
+                ToolParameter(name="tab_index", type="number", description="The index of the tab to switch to (0-based)")
+            ],
+            handler=self._switch_to_tab
+        ))
+        
+        self.register_tool(Tool(
+            name="create_new_tab",
+            description="Create and switch to a new tab/page. Optionally navigate to a URL.",
+            parameters=[
+                ToolParameter(name="url", type="string", description="Optional URL to navigate to in the new tab", required=False)
+            ],
+            handler=self._create_new_tab
+        ))
+        
+        self.register_tool(Tool(
+            name="close_tab",
+            description="Close a specific tab by its index. Cannot close the last remaining tab. After closing, switches to tab 0.",
+            parameters=[
+                ToolParameter(name="tab_index", type="number", description="The index of the tab to close (0-based)")
+            ],
+            handler=self._close_tab
+        ))
         
         # Test script tools - similar to file editing tools
         self.register_tool(Tool(
@@ -847,6 +911,316 @@ Result:
 - Always verify input with element.input_value() in tests"""
         
         return result
+    
+    async def _hover_label(self, label: int) -> str:
+        """Hover over an element by its label number using mouse coordinates."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        if not self.current_elements:
+            raise RuntimeError("No labeled elements available. Call capture_labeled_screenshot first.")
+        
+        # Find element by label
+        element_info = None
+        for elem in self.current_elements:
+            if elem.label == label:
+                element_info = elem
+                break
+        
+        if not element_info:
+            available_labels = [e.label for e in self.current_elements]
+            raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
+        
+        # Calculate center coordinates
+        bbox = element_info.bbox
+        center_x = bbox['x'] + bbox['width'] / 2
+        center_y = bbox['y'] + bbox['height'] / 2
+        
+        # ALWAYS use mouse.move() for reliable hover - no DOM selector magic
+        print(f"🎯 Hovering at coordinates ({int(center_x)}, {int(center_y)})...")
+        await self.page.mouse.move(center_x, center_y)
+        
+        # Wait for hover effects to trigger (dropdowns, menus, etc.)
+        await self.page.wait_for_timeout(300)
+        
+        # Build automation context
+        automation_notes = []
+        automation_notes.append(f"✓ Hovered using MOUSE MOVE to coordinates")
+        automation_notes.append(f"  Python code: await page.mouse.move({center_x}, {center_y})")
+        automation_notes.append(f"              await page.wait_for_timeout(300)  # Wait for hover effects")
+        
+        # Provide alternative selectors if available (for script generation reference)
+        selector_alternatives = []
+        if element_info.selector:
+            selector_alternatives.append(f"Alternative: await page.hover('{element_info.selector}')")
+        if element_info.attributes.get('id'):
+            selector_alternatives.append(f"By ID: await page.hover('#{element_info.attributes['id']}')")
+        if element_info.attributes.get('ariaLabel'):
+            selector_alternatives.append(f"By aria-label: await page.hover('[aria-label=\"{element_info.attributes['ariaLabel']}\"]')")
+        
+        result = f"""Hovered over element [Label {label}] successfully!
+
+Element Details:
+- Type: {element_info.element_type}
+- Tag: {element_info.tag_name}
+- Text: {element_info.text[:50] if element_info.text else '(no text)'}
+- Position: ({int(bbox['x'])}, {int(bbox['y'])})
+
+Automation Method Used:
+{chr(10).join(automation_notes)}
+
+Alternative Selectors for Script Generation:
+{chr(10).join(f"- {alt}" for alt in selector_alternatives) if selector_alternatives else "- (coordinates only - most reliable for hover)"}
+
+💡 IMPORTANT FOR SCRIPT GENERATION:
+- Mouse coordinates are MOST RELIABLE for hover interactions
+- Coordinates trigger :hover CSS pseudoclasses correctly
+- DOM hover() may fail on complex dropdowns/menus
+- Always wait 200-500ms after hover for animations
+
+💡 TIP: Call capture_labeled_screenshot again to see if hover triggered a dropdown/menu."""
+        
+        return result
+    
+    async def _select_from_label(self, label: int, value: str = None, index: int = None) -> str:
+        """Select an option from a dropdown by its label number."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        if not self.current_elements:
+            raise RuntimeError("No labeled elements available. Call capture_labeled_screenshot first.")
+        
+        if value is None and index is None:
+            raise ValueError("Must provide either 'value' or 'index' parameter")
+        
+        # Find element by label
+        element_info = None
+        for elem in self.current_elements:
+            if elem.label == label:
+                element_info = elem
+                break
+        
+        if not element_info:
+            available_labels = [e.label for e in self.current_elements]
+            raise ValueError(f"Label {label} not found. Available labels: {available_labels}")
+        
+        if not element_info.selector:
+            raise RuntimeError(f"Element [Label {label}] has no selector - cannot interact with it")
+        
+        # Select the option
+        try:
+            if index is not None:
+                # Select by index
+                await self.page.select_option(element_info.selector, index=index, timeout=2000)
+                return f"""Selected option by index {index} in [Label {label}]
+
+Element: {element_info.selector}
+Python code: await page.select_option('{element_info.selector}', index={index})"""
+            else:
+                # Select by value or text
+                await self.page.select_option(element_info.selector, value, timeout=2000)
+                return f"""Selected option '{value}' in [Label {label}]
+
+Element: {element_info.selector}
+Python code: await page.select_option('{element_info.selector}', '{value}')"""
+        except Exception as e:
+            return f"❌ Failed to select option: {str(e)}\n\nTip: For non-<select> dropdowns, use click_label to open the menu first."
+    
+    async def _wait_for_seconds(self, seconds: float) -> str:
+        """Wait for specified number of seconds."""
+        if not self.page:
+            raise RuntimeError("Browser not initialized. Call initialize() first.")
+        
+        await self.page.wait_for_timeout(int(seconds * 1000))
+        
+        return f"""Waited for {seconds} seconds.
+
+Python code: await page.wait_for_timeout({int(seconds * 1000)})
+
+💡 TIP: For production tests, prefer:
+- page.wait_for_selector() - wait for specific elements
+- page.wait_for_load_state() - wait for page loads
+- Fixed timeouts should be avoided when possible"""
+    
+    # Tab/Page management tools
+    
+    async def _get_context_info(self) -> str:
+        """Get information about all open tabs/pages in the browser context."""
+        if not self.context:
+            raise RuntimeError("Browser context not initialized. Call initialize() first.")
+        
+        # Get all pages in the context
+        pages = self.context.pages
+        
+        if not pages:
+            return "No pages/tabs open in the browser context."
+        
+        # Find current page index
+        current_page_index = -1
+        for idx, page in enumerate(pages):
+            if page == self.page:
+                current_page_index = idx
+                break
+        
+        # Build context information
+        output = f"Browser Context - {len(pages)} tab(s) open:\n\n"
+        
+        for idx, page in enumerate(pages):
+            is_current = " ← CURRENT" if idx == current_page_index else ""
+            try:
+                url = page.url
+                title = await page.title()
+                output += f"[{idx}] {title}\n"
+                output += f"     URL: {url}{is_current}\n\n"
+            except Exception as e:
+                output += f"[{idx}] (Error getting page info: {e}){is_current}\n\n"
+        
+        output += f"""💡 Usage:
+- Use switch_to_tab(tab_index={0 if current_page_index != 0 else 1}) to switch tabs
+- Use create_new_tab() to open a new tab
+- Use close_tab(tab_index=X) to close a specific tab
+- After switching, call capture_labeled_screenshot to see the page"""
+        
+        return output
+    
+    async def _switch_to_tab(self, tab_index: int) -> str:
+        """Switch to a different tab by index."""
+        if not self.context:
+            raise RuntimeError("Browser context not initialized. Call initialize() first.")
+        
+        pages = self.context.pages
+        
+        if not pages:
+            raise RuntimeError("No pages/tabs available in the context.")
+        
+        if tab_index < 0 or tab_index >= len(pages):
+            raise ValueError(f"Invalid tab index {tab_index}. Available tabs: 0 to {len(pages) - 1}")
+        
+        # Switch to the specified page
+        old_page = self.page
+        self.page = pages[tab_index]
+        
+        # Clear current elements since we're on a new page
+        self.current_elements = []
+        self.last_screenshot_path = None
+        
+        # Get new page info
+        try:
+            url = self.page.url
+            title = await self.page.title()
+            
+            return f"""Switched to tab [{tab_index}] successfully!
+
+Tab Details:
+- Title: {title}
+- URL: {url}
+- Total tabs open: {len(pages)}
+
+Python code: 
+  pages = context.pages
+  page = pages[{tab_index}]
+
+💡 IMPORTANT: Call capture_labeled_screenshot to see what's on this page!"""
+        except Exception as e:
+            return f"Switched to tab [{tab_index}], but error getting page info: {e}"
+    
+    async def _create_new_tab(self, url: str = None) -> str:
+        """Create a new tab and optionally navigate to a URL."""
+        if not self.context:
+            raise RuntimeError("Browser context not initialized. Call initialize() first.")
+        
+        # Create new page
+        new_page = await self.context.new_page()
+        
+        # Switch to it
+        self.page = new_page
+        self.current_elements = []
+        self.last_screenshot_path = None
+        
+        # Navigate if URL provided
+        if url:
+            await new_page.goto(url, wait_until="domcontentloaded")
+            await new_page.wait_for_timeout(500)  # Wait for initial render
+            
+            title = await new_page.title()
+            current_url = new_page.url
+            
+            return f"""Created and switched to new tab!
+
+Tab Details:
+- Title: {title}
+- URL: {current_url}
+- Total tabs open: {len(self.context.pages)}
+
+Python code:
+  new_page = await context.new_page()
+  await new_page.goto('{url}')
+  page = new_page
+
+💡 IMPORTANT: Call capture_labeled_screenshot to see what's on this page!"""
+        else:
+            return f"""Created and switched to new blank tab!
+
+- Total tabs open: {len(self.context.pages)}
+
+Python code:
+  new_page = await context.new_page()
+  page = new_page
+
+💡 TIP: Use navigate_to_url to go to a specific URL, then capture_labeled_screenshot."""
+    
+    async def _close_tab(self, tab_index: int) -> str:
+        """Close a specific tab by index."""
+        if not self.context:
+            raise RuntimeError("Browser context not initialized. Call initialize() first.")
+        
+        pages = self.context.pages
+        
+        if not pages:
+            raise RuntimeError("No pages/tabs available in the context.")
+        
+        if len(pages) == 1:
+            raise RuntimeError("Cannot close the last remaining tab. At least one tab must remain open.")
+        
+        if tab_index < 0 or tab_index >= len(pages):
+            raise ValueError(f"Invalid tab index {tab_index}. Available tabs: 0 to {len(pages) - 1}")
+        
+        page_to_close = pages[tab_index]
+        
+        # Get info before closing
+        try:
+            url = page_to_close.url
+            title = await page_to_close.title()
+            page_info = f"'{title}' ({url})"
+        except:
+            page_info = f"tab {tab_index}"
+        
+        # Close the page
+        await page_to_close.close()
+        
+        # If we closed the current page, switch to tab 0
+        if page_to_close == self.page:
+            remaining_pages = self.context.pages
+            if remaining_pages:
+                self.page = remaining_pages[0]
+                self.current_elements = []
+                self.last_screenshot_path = None
+                switch_message = f"\n✓ Switched to tab [0]: {await self.page.title()}"
+            else:
+                switch_message = "\n⚠️ No pages remaining!"
+        else:
+            switch_message = ""
+        
+        return f"""Closed tab [{tab_index}]: {page_info}
+
+Remaining tabs: {len(self.context.pages)}{switch_message}
+
+Python code:
+  pages = context.pages
+  await pages[{tab_index}].close()
+  page = pages[0]  # Switch to first tab
+
+💡 TIP: Use get_context_info to see remaining tabs."""
     
     # Test script editing tools
     

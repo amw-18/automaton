@@ -32,8 +32,37 @@ class ScrollPosition(BaseModel):
     y: int = Field(..., ge=0)
 
 
+class VisualWorkflowAction(BaseModel):
+    """
+    A workflow action detected from video analysis (visual only, no DOM data).
+    Used by the video processor - timestamps are generated automatically.
+    """
+
+    action_type: Literal["click", "type", "navigate", "scroll", "select", "hover", "wait"] = Field(
+        ..., description="Type of action performed"
+    )
+    description: str = Field(..., description="Clear description of what the user did")
+
+    # Action-specific details
+    target_url: Optional[str] = Field(None, description="For navigation actions - the new URL")
+    input_text: Optional[str] = Field(None, description="For typing actions - the text entered")
+    scroll_direction: Optional[Literal["up", "down"]] = Field(
+        None, description="For scroll actions - direction"
+    )
+
+    # Visual context
+    element_description: Optional[str] = Field(
+        None, description="Description of the UI element (e.g., 'Blue Submit button', 'Email field')"
+    )
+    expected_outcome: Optional[str] = Field(
+        None, description="What should happen after this action"
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class WorkflowAction(BaseModel):
-    """A single action/step in the workflow."""
+    """A single action/step in the workflow (includes DOM and timestamp data)."""
 
     timestamp: str = Field(..., description="Relative to start of video... seconds into the video")
     action_type: Literal["click", "type", "navigate", "scroll", "select", "hover", "wait"] = Field(
@@ -51,7 +80,7 @@ class WorkflowAction(BaseModel):
         default=None, description="For scroll actions"
     )
 
-    # Optional DOM details
+    # Optional DOM details (not available from video analysis)
     dom_element: Optional[DOMElement] = Field(None, description="DOM element details")
 
     # Validation/assertion expectations

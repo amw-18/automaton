@@ -35,7 +35,7 @@ OPTIMIZE_WAITS = True
 
 # LangGraph Configuration
 ENABLE_CHECKPOINTING = False  # Set to True if using persistence
-MAX_ITERATIONS = 50  # Maximum agent iterations before stopping
+MAX_ITERATIONS = 100  # Maximum agent iterations before stopping
 
 
 # System Prompt for the agent

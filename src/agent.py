@@ -5,9 +5,17 @@ Main agent implementation using LangGraph for workflow test generation.
 import asyncio
 import json
 import logging
+import os
+import sys
 import time
 import warnings
+from pathlib import Path
 from typing import Any
+
+# Add project root to path for direct execution
+if __name__ == "__main__":
+    project_root = Path(__file__).parent.parent
+    sys.path.insert(0, str(project_root))
 
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.tools import StructuredTool
@@ -281,8 +289,19 @@ async def main():
     """Example of using the WorkflowAgent."""
     from src.workflow_schema import WorkflowInput
     
+    # Auto-detect and set credentials
+    creds_file = Path("vertex-ai-credentials.json")
+    if creds_file.exists() and not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        print(f"📍 Found {creds_file}")
+        print("   Setting GOOGLE_APPLICATION_CREDENTIALS...")
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(creds_file.absolute())
+    elif not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        print("❌ Google Cloud credentials not found!")
+        print("   Please set GOOGLE_APPLICATION_CREDENTIALS or add vertex-ai-credentials.json")
+        return
+    
     # Load example workflow
-    with open("examples/try2.json", "r") as f:
+    with open("workflows/mando_test1_workflow.json", "r") as f:
         workflow_data = json.load(f)
     
     workflow = WorkflowInput.model_validate(workflow_data)
@@ -302,7 +321,7 @@ async def main():
         # Generate test script
         result = await agent.generate_test_script(
             workflow=workflow,
-            output_path="gen_tests/test_generated.py"
+            output_path="gen_tests/mando_test1_generated.py"
         )
         
         if result.success:

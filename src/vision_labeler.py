@@ -16,13 +16,14 @@ class ElementInfo:
     """Information about a labeled interactive element."""
     
     def __init__(self, label: int, selector: str, element_type: str, text: str, 
-                 bbox: Dict[str, float], attributes: Dict[str, str]):
+                 bbox: Dict[str, float], attributes: Dict[str, str], tag_name: str = None):
         self.label = label
         self.selector = selector
         self.element_type = element_type
         self.text = text
         self.bbox = bbox  # {x, y, width, height}
         self.attributes = attributes
+        self.tag_name = tag_name or element_type  # HTML tag name (a, button, input, etc.)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format. Primarily used for debugging and detailed inspection."""
@@ -106,8 +107,21 @@ class VisionLabeler:
                 'textarea',
                 'select',
                 '[role="button"]',
+                '[role="menuitem"]',
+                '[role="menu"]',
+                '[role="navigation"]',
+                'nav a',
+                'nav button',
+                'nav [role="button"]',
                 '[onclick]',
-                '[contenteditable="true"]'
+                '[onmouseover]',
+                '[onmouseenter]',
+                '[contenteditable="true"]',
+                // Common dropdown/menu patterns
+                '.nav-item',
+                '.menu-item',
+                '.dropdown-toggle',
+                '[data-toggle="dropdown"]'
             ];
             
             const allElements = new Set();
@@ -219,7 +233,8 @@ class VisionLabeler:
                 element_type=elem['type'],
                 text=elem['text'],
                 bbox=bbox,
-                attributes=elem['attributes']
+                attributes=elem['attributes'],
+                tag_name=elem['tagName']
             )
             element_infos.append(element_info)
             
@@ -284,29 +299,51 @@ class VisionLabeler:
     
     def format_elements_for_llm(self, elements: List[ElementInfo]) -> str:
         """
-        Format element list for LLM consumption.
-        Groups elements by type and shows only label numbers.
+        Format element list for LLM consumption with detailed metadata.
+        Shows label, tag, text content for each element.
         
-        Returns a concise string with elements grouped by type.
+        Returns a detailed string with each element's information.
         """
         if not elements:
             return "No interactive elements found on the page."
         
-        # Group elements by type
-        type_groups = {}
-        for elem in elements:
-            elem_type = elem.element_type
-            if elem_type not in type_groups:
-                type_groups[elem_type] = []
-            type_groups[elem_type].append(elem.label)
-        
-        # Format output
         output = f"Found {len(elements)} interactive elements:\n\n"
         
-        # Sort by type name for consistency
-        for elem_type in sorted(type_groups.keys()):
-            labels = type_groups[elem_type]
-            labels_str = ", ".join(str(label) for label in sorted(labels))
-            output += f"{elem_type}: {labels_str}\n"
+        for elem in elements:
+            # Show HTML tag and type if different
+            tag_display = f"{elem.tag_name}"
+            if elem.element_type != elem.tag_name:
+                tag_display += f" type=\"{elem.element_type}\""
+            
+            # Show text content (truncated if too long)
+            text_preview = elem.text[:50] if elem.text else "(no text)"
+            if elem.text and len(elem.text) > 50:
+                text_preview += "..."
+            
+            # Build element description
+            output += f"[{elem.label}] <{tag_display}>"
+            
+            # Add text if available
+            if elem.text:
+                output += f" \"{text_preview}\""
+            
+            # Add key attributes
+            attrs_shown = []
+            if elem.attributes.get('id'):
+                attrs_shown.append(f"id=\"{elem.attributes['id']}\"")
+            if elem.attributes.get('class'):
+                class_preview = elem.attributes['class'][:40]
+                attrs_shown.append(f"class=\"{class_preview}\"")
+            if elem.attributes.get('placeholder'):
+                attrs_shown.append(f"placeholder=\"{elem.attributes['placeholder'][:30]}\"")
+            if elem.attributes.get('ariaLabel'):
+                attrs_shown.append(f"aria-label=\"{elem.attributes['ariaLabel'][:30]}\"")
+            if elem.attributes.get('name'):
+                attrs_shown.append(f"name=\"{elem.attributes['name']}\"")
+            
+            if attrs_shown:
+                output += f" ({', '.join(attrs_shown)})"
+            
+            output += "\n"
         
         return output.strip()

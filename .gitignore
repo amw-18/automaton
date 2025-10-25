@@ -216,5 +216,5 @@ logs/
 screenshots/
 gen_tests/
 
-# Recordings
 recordings/
+workflows/

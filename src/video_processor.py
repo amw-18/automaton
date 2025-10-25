@@ -9,19 +9,31 @@ import base64
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import cv2
 from langchain_core.messages import HumanMessage
 from langchain_google_vertexai import ChatVertexAI
+from pydantic import BaseModel, Field
 
 from .config import GCP_LOCATION, GCP_PROJECT_ID
 from .workflow_schema import (
     Viewport,
+    VisualWorkflowAction,
     WorkflowAction,
     WorkflowInput,
     WorkflowMetadata,
 )
+
+
+# Pydantic model for structured output from Gemini
+class VideoAnalysisResult(BaseModel):
+    """Result of video analysis containing all detected actions."""
+
+    actions: list[VisualWorkflowAction] = Field(
+        ..., description="List of detected user actions in chronological order"
+    )
+    summary: Optional[str] = Field(None, description="Brief summary of the workflow")
 
 
 class VideoFrame:
@@ -73,6 +85,13 @@ class VideoProcessor:
             location=location,
             temperature=0.2,  # Lower temperature for more consistent output
             max_output_tokens=8192,
+        )
+        
+        # Create structured output version for action detection
+        self.llm_structured = self.llm.with_structured_output(
+            VideoAnalysisResult,
+            method="function_calling",
+            include_raw=False,
         )
 
     async def process_video(
@@ -256,21 +275,24 @@ class VideoProcessor:
 
     async def _analyze_video_with_gemini(
         self, frames: list[VideoFrame], starting_url: str
-    ) -> list[dict[str, Any]]:
+    ) -> list[VisualWorkflowAction]:
         """
         Analyze video frames using Gemini to detect user actions.
+        Uses structured output with Pydantic models for reliable JSON extraction.
 
         Args:
             frames: List of extracted video frames
             starting_url: Starting URL of the workflow
 
         Returns:
-            List of detected actions as dictionaries
+            List of VisualWorkflowAction objects (timestamps generated later)
         """
         # Prepare frames for Gemini (limit to avoid token limits)
         # Use key frames: first, last, and evenly distributed middle frames
         max_frames = 20  # Limit frames to avoid overwhelming the model
         selected_frames = self._select_key_frames(frames, max_frames)
+
+        print(f"  Analyzing {len(selected_frames)} key frames...")
 
         # Build the prompt for Gemini
         prompt = self._build_analysis_prompt(starting_url, len(selected_frames))
@@ -289,13 +311,36 @@ class VideoProcessor:
 
         message = HumanMessage(content=content)  # pyright: ignore[reportArgumentType]
 
-        # Call Gemini
-        response = await self.llm.ainvoke([message])
-
-        # Parse response to extract actions
-        actions = self._parse_gemini_response(response.content, selected_frames)
-
-        return actions
+        # Call Gemini with structured output
+        print("  Calling Gemini with structured output...")
+        try:
+            result: VideoAnalysisResult = await self.llm_structured.ainvoke([message])
+            
+            if result.summary:
+                print(f"  Summary: {result.summary}")
+            
+            # Return VisualWorkflowAction objects directly
+            return result.actions
+        except Exception as e:
+            print(f"⚠️ Structured output failed: {e}")
+            print(f"  Error details: {str(e)}")
+            print("  Falling back to manual parsing...")
+            
+            # Fallback to unstructured call
+            response = await self.llm.ainvoke([message])
+            actions_dict = self._parse_gemini_response(response.content, selected_frames)
+            
+            # Convert dicts to VisualWorkflowAction objects
+            actions = []
+            for action_data in actions_dict:
+                try:
+                    action = VisualWorkflowAction(**action_data)
+                    actions.append(action)
+                except Exception as parse_error:
+                    print(f"⚠️ Failed to parse action: {parse_error}")
+                    continue
+            
+            return actions
 
     def _select_key_frames(self, frames: list[VideoFrame], max_frames: int) -> list[VideoFrame]:
         """
@@ -333,63 +378,49 @@ class VideoProcessor:
         return f"""You are analyzing a screen recording video of a user interacting with a website.
 The video starts at: {starting_url}
 
-I'm providing you with {num_frames} key frames from this video. Your task is to:
+I'm providing you with {num_frames} key frames from this video in chronological order.
 
-1. **Identify user actions** in chronological order by comparing consecutive frames
-2. **Detect changes** that indicate interactions:
-   - Mouse clicks (buttons, links, navigation items)
-   - Text input (typing into fields)
-   - Page navigation (URL changes, new pages loading)
-   - Scrolling
-   - Dropdown selections
-   - Hover effects
+## Your Task:
 
-3. **For each detected action**, provide:
-   - **action_type**: One of: click, type, navigate, scroll, select, hover, wait
-   - **description**: Clear description of what the user did
-   - **approximate_timestamp**: Frame number or relative time (e.g., "2.5s")
-   - **element_description**: Description of the UI element (e.g., "Submit button", "Email input field")
-   - **input_text**: (For 'type' actions only) What text was entered
-   - **target_url**: (For 'navigate' actions only) The new URL
-   - **expected_outcome**: What should happen after this action
+Analyze the frames to identify user actions by comparing consecutive frames and detecting changes.
 
-4. **Focus on significant actions** - ignore minor mouse movements or purely visual changes
+## Action Types to Detect:
+- **click**: Mouse clicks on buttons, links, navigation items
+- **type**: Text input into form fields
+- **navigate**: Page navigation (URL changes, new pages loading)
+- **scroll**: Scrolling up/down the page
+- **select**: Dropdown or option selections
+- **hover**: Hover effects (if clearly visible)
+- **wait**: Explicit waiting for content to load
 
-Return your analysis as a JSON array of actions in this format:
-```json
-[
-  {{
-    "action_type": "click",
-    "description": "Click on the Login button",
-    "approximate_timestamp": "1.5s",
-    "element_description": "Blue 'Login' button in the top right corner",
-    "expected_outcome": "Login form modal appears"
-  }},
-  {{
-    "action_type": "type",
-    "description": "Enter email address",
-    "approximate_timestamp": "3.0s",
-    "element_description": "Email input field in login form",
-    "input_text": "user@example.com"
-  }},
-  {{
-    "action_type": "navigate",
-    "description": "Page redirected to dashboard",
-    "approximate_timestamp": "5.5s",
-    "target_url": "{starting_url}/dashboard",
-    "expected_outcome": "Dashboard page loads with user content"
-  }}
-]
-```
+## For Each Action Provide:
 
-IMPORTANT:
-- Only return the JSON array, no additional text
-- Ensure valid JSON syntax
-- Be precise about action types
-- Describe elements clearly for future automation
-- Estimate timestamps based on frame sequence
+1. **action_type**: One of the types above
+2. **description**: Clear, concise description of what the user did
+3. **element_description**: Description of the UI element (e.g., "Blue Submit button at bottom", "Email input field")
+4. **input_text**: (ONLY for 'type' actions) The text that was entered
+5. **target_url**: (ONLY for 'navigate' actions) The new URL
+6. **scroll_direction**: (ONLY for 'scroll' actions) Either "up" or "down"
+7. **expected_outcome**: What should happen after this action (optional but recommended)
 
-Analyze the frames now:"""
+**Note:** Do NOT include timestamps - those will be calculated automatically.
+
+## Guidelines:
+
+- Focus on **significant actions** - ignore minor mouse movements or purely visual changes
+- Be **precise** about action types
+- Describe elements **clearly** for future automation (describe what you see, not CSS selectors)
+- Look for visual cues: button states, form changes, page transitions
+- Infer text input from visible form field changes
+- Order actions chronologically based on the frame sequence
+
+## Example Output Structure:
+
+The function will return a structured response with:
+- A list of actions (each with the fields above)
+- An optional summary of the workflow
+
+Analyze the frames now and identify all significant user actions."""
 
     def _parse_gemini_response(
         self, response_text: str, frames: list[VideoFrame]
@@ -475,7 +506,7 @@ Analyze the frames now:"""
         workflow_name: str,
         workflow_description: str,
         starting_url: str,
-        actions: list[dict[str, Any]],
+        actions: list[VisualWorkflowAction],
         video_metadata: dict[str, Any],
         frames: list[VideoFrame],
     ) -> WorkflowInput:
@@ -502,19 +533,20 @@ Analyze the frames now:"""
             viewport=Viewport(width=video_metadata["width"], height=video_metadata["height"]),
         )
 
-        # Convert detected actions to WorkflowAction objects
+        # Convert VisualWorkflowAction to WorkflowAction with timestamps
         workflow_actions = []
         base_time = datetime.now()
+        
+        # Calculate timestamp spacing based on video duration and action count
+        video_duration_sec = video_metadata.get("duration_sec", len(actions) * 3)
+        if len(actions) > 1:
+            time_per_action = video_duration_sec / len(actions)
+        else:
+            time_per_action = video_duration_sec
 
-        for idx, action_data in enumerate(actions):
-            # Parse timestamp
-            timestamp_str = action_data.get("approximate_timestamp", f"{idx}s")
-            # Extract seconds from string like "2.5s"
-            try:
-                seconds = float(timestamp_str.replace("s", "").strip())
-            except:
-                seconds = idx * 2  # Default to 2 seconds per action
-
+        for idx, visual_action in enumerate(actions):
+            # Auto-generate timestamp based on position in sequence
+            seconds = idx * time_per_action
             action_time = base_time + timedelta(seconds=seconds)
 
             # Save screenshot for this action if available
@@ -531,20 +563,17 @@ Analyze the frames now:"""
                 with open(screenshot_path, "wb") as f:
                     f.write(closest_frame.image)
 
-            # Create WorkflowAction
-            action_type = action_data.get("action_type", "click")
-
+            # Create WorkflowAction from VisualWorkflowAction
             workflow_action = WorkflowAction(
                 timestamp=action_time.isoformat(),
-                action_type=action_type,
-                description=action_data.get("description", ""),
+                action_type=visual_action.action_type,
+                description=visual_action.description,
                 screenshot_url=screenshot_path,
-                target_url=action_data.get("target_url"),
-                input_text=action_data.get("input_text"),
-                expected_outcome=action_data.get("expected_outcome"),
-                # Note: DOM element details not available from video
-                # Could be enhanced by OCR or additional analysis
-                dom_element=None,
+                target_url=visual_action.target_url,
+                input_text=visual_action.input_text,
+                expected_outcome=visual_action.expected_outcome,
+                dom_element=None,  # Not available from video
+                scroll_position=None,  # Could be enhanced later
             )
 
             workflow_actions.append(workflow_action)
