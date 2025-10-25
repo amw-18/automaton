@@ -7,8 +7,8 @@ from typing import Literal
 
 
 # Google Cloud Configuration
-GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "YOUR_PROJECT_ID")
-GCP_LOCATION = os.getenv("GCP_LOCATION", "asia-southeast1")
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "deft-axon-474218-j8")
+GCP_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 
 # Model Configuration
 MODEL_NAME = "gemini-2.5-flash"  # or "gemini-2.5-flash" for reasoning

@@ -215,3 +215,6 @@ vertex-ai-credentials.json
 logs/
 screenshots/
 gen_tests/
+
+# Recordings
+recordings/

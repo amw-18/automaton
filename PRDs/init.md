@@ -228,3 +228,100 @@ asyncio.run(main())
 
 See `PRDs/agent_implementation.md` for complete implementation details and `src/README_AGENT.md` for usage guide.
 
+### Task 4
+Implement a multi-modal pre-processor that takes a video as input and generates output in the `WorkflowSchema` format.
+
+#### Solution
+Created `src/video_processor.py` with complete video-to-workflow AI pipeline:
+
+**Core Components:**
+- **VideoProcessor**: Main class for processing screen recording videos using Gemini vision
+- **VideoFrame**: Represents extracted frames with timestamp and image data
+- **Frame Extraction**: Uses OpenCV to sample video at configurable frame rate (default: 2 FPS, 500ms min interval)
+- **Key Frame Selection**: Intelligently selects up to 20 key frames (first, last, evenly distributed middle) to optimize AI analysis
+
+**Gemini Multi-modal Integration:**
+- Uses `ChatVertexAI` with `gemini-2.0-flash-001` for vision analysis
+- Sends key frames as base64-encoded PNG images
+- Custom prompt instructs Gemini to detect user actions by comparing consecutive frames
+- Identifies action types: click, type, navigate, scroll, select, hover, wait
+- Extracts action descriptions, timestamps, element descriptions, and expected outcomes
+
+**Workflow Generation Pipeline:**
+1. **Extract Frames**: OpenCV samples video frames at specified rate
+2. **Select Key Frames**: Reduces to max 20 frames to stay within token limits
+3. **Analyze with Gemini**: AI vision detects user interactions from frame sequences
+4. **Parse Response**: Extracts JSON array of detected actions from Gemini response
+5. **Generate WorkflowInput**: Converts detected actions to `WorkflowAction` objects with:
+   - ISO 8601 timestamps calculated from frame timing
+   - Action types mapped to WorkflowSchema literals
+   - Screenshot paths saved to `screenshots/` directory
+   - Optional input text, target URLs, and expected outcomes
+6. **Save JSON**: Outputs valid `WorkflowInput` JSON with full Pydantic validation
+
+**Key Features:**
+- **Intelligent Sampling**: Balances detail with API token limits
+- **Video Metadata Extraction**: Captures resolution, FPS, duration using OpenCV
+- **Screenshot Generation**: Saves frame images corresponding to each detected action
+- **Flexible Configuration**: Customizable frame sample rate and intervals
+- **Error Handling**: Robust JSON parsing with fallback for code block extraction
+- **Async/Await**: Full async support for efficient processing
+
+**Configuration Options:**
+```python
+VideoProcessor(
+    project_id="gcp-project-id",
+    location="us-central1", 
+    model_name="gemini-2.0-flash-001",
+    frame_sample_rate=2,  # Frames per second to extract
+    min_frame_interval_ms=500  # Min time between sampled frames
+)
+```
+
+**Usage Pattern:**
+```python
+from src.video_processor import process_video_to_workflow
+
+workflow = await process_video_to_workflow(
+    video_path="recordings/login_flow.mp4",
+    starting_url="https://example.com",
+    workflow_name="User Login Flow",
+    workflow_description="Complete user authentication process",
+    output_json_path="workflows/login_workflow.json"
+)
+
+# Returns WorkflowInput with detected actions
+print(f"Detected {len(workflow.actions)} actions")
+```
+
+**Video Recording Best Practices:**
+- Record at 1920x1080 or 1280x720 resolution
+- Use 30 FPS minimum
+- Perform actions deliberately with brief pauses
+- Let pages fully load between actions
+- Avoid rapid mouse movements or clicking
+
+**Output:**
+- Valid `WorkflowInput` JSON matching schema from Task 1
+- Frame screenshots saved to `screenshots/action_N_frame_M.png`
+- Metadata includes video resolution as viewport dimensions
+- Actions include timestamps, descriptions, types, and expected outcomes
+
+**Dependencies Added:**
+- `opencv-python`: Video frame extraction and processing
+- `google-cloud-aiplatform`: Already available via langchain-google-vertexai
+
+**Documentation:**
+- `docs/VIDEO_PROCESSOR.md`: Complete usage guide, architecture, best practices
+- `examples/process_video_example.py`: Example scripts demonstrating usage
+
+**Limitations:**
+- DOM element details (CSS selectors, XPath) not available from video alone - agent must use vision-based interaction
+- Text input detection is approximate based on visual cues
+- Complex interactions (drag-and-drop) may not be detected accurately
+- Maximum 20 frames analyzed to stay within token limits
+
+**Integration:**
+The generated `WorkflowInput` JSON can be directly used with `WorkflowAgent` from Task 3 to generate executable Playwright test scripts. The agent will use vision-based interaction (capture_labeled_screenshot, click_label, type_into_label) since video analysis cannot extract precise DOM selectors.
+
+See `docs/VIDEO_PROCESSOR.md` for complete documentation including troubleshooting, performance tips, and advanced usage.
