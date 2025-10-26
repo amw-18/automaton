@@ -33,22 +33,26 @@ class AgentExecutionService:
             {"message": "Starting agent execution..."}
         )
         
-        # Setup paths
+        # Setup paths - ALL outputs go to session directory
         session_dir = Path(session.video_path).parent
         screenshot_dir = session_dir / "screenshots"
         output_dir = session_dir / "output"
+        logs_dir = session_dir / "logs"
         output_dir.mkdir(exist_ok=True)
         screenshot_dir.mkdir(exist_ok=True)
+        logs_dir.mkdir(exist_ok=True)
         
         script_path = output_dir / "test_generated.py"
+        debug_log_path = logs_dir / f"agent_{session_id}.jsonl"
         
         toolkit = None
         
         try:
-            # Initialize Playwright toolkit with custom screenshot directory
+            # Initialize Playwright toolkit with custom screenshot directory and target output path
             toolkit = PlaywrightToolkit(
                 headless=False,  # Set to True for production
-                screenshot_dir=str(screenshot_dir)
+                screenshot_dir=str(screenshot_dir),
+                target_output_path=str(script_path)
             )
             
             # Set screenshot callback for streaming
@@ -57,6 +61,11 @@ class AgentExecutionService:
                 print(f"🔄 Streaming screenshot: {path}")
                 # Make path relative to uploads directory for URL construction
                 rel_path = Path(path).relative_to(Path("uploads"))
+                
+                # Add event to session
+                session.add_event("screenshot", {"path": str(rel_path)})
+                session_manager.save_session(session)
+                
                 await stream_manager.broadcast_screenshot(session_id, str(rel_path))
             
             toolkit.set_screenshot_callback(screenshot_callback)
@@ -68,7 +77,7 @@ class AgentExecutionService:
             agent = WorkflowAgent(
                 toolkit=toolkit,
                 debug_mode=True,
-                debug_log_file=f"logs/agent_{session_id}.jsonl"
+                debug_log_file=str(debug_log_path)
             )
             
             # Send status update
@@ -86,7 +95,12 @@ class AgentExecutionService:
             
             if result.success:
                 session.script_path = str(script_path)
+                session.add_event("script_generated", {
+                    "script_path": str(script_path),
+                    "actions_count": result.actions_count
+                })
                 session_manager.update_status(session_id, "complete")
+                session_manager.save_session(session)
                 
                 await stream_manager.broadcast_complete(
                     session_id,
@@ -99,7 +113,10 @@ class AgentExecutionService:
                 print(f"   Actions: {result.actions_count}")
                 
             else:
+                session.add_event("error", {"error": result.error})
                 session_manager.update_status(session_id, "error")
+                session_manager.save_session(session)
+                
                 await stream_manager.broadcast_complete(
                     session_id,
                     success=False,

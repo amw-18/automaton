@@ -82,7 +82,8 @@ class PlaywrightToolkit:
         headless: bool = False, 
         browser_type: str = "chromium", 
         use_vision: bool = True,
-        screenshot_dir: str = "screenshots"
+        screenshot_dir: str = "screenshots",
+        target_output_path: Optional[str] = None
     ):
         self.headless = headless
         self.browser_type = browser_type
@@ -94,6 +95,9 @@ class PlaywrightToolkit:
         # Test script being generated (full content as string)
         self.test_script_content: str = ""
         self.script_file_path: Optional[str] = None
+        
+        # Target output path (where to actually save the script, overrides LLM's path)
+        self.target_output_path = target_output_path
         
         # Vision-based element labeling
         self.use_vision = use_vision
@@ -1288,15 +1292,22 @@ Python code:
         return f"Test script edited successfully (replaced 1 occurrence)"
     
     async def _save_test_script_to_file(self, file_path: str) -> str:
-        """Save the test script to a file."""
+        """Save the test script to a file. Uses target_output_path if set, ignores file_path parameter."""
         if not self.test_script_content:
             raise ValueError("Test script is empty. Use write_test_script first.")
         
-        with open(file_path, 'w', encoding='utf-8') as f:
+        # Use target_output_path if set (ignores LLM's file_path suggestion)
+        actual_path = self.target_output_path if self.target_output_path else file_path
+        
+        # Ensure parent directory exists
+        from pathlib import Path
+        Path(actual_path).parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(actual_path, 'w', encoding='utf-8') as f:
             f.write(self.test_script_content)
         
-        self.script_file_path = file_path
-        return f"Test script saved to {file_path} ({len(self.test_script_content)} characters)"
+        self.script_file_path = actual_path
+        return f"Test script saved to {actual_path} ({len(self.test_script_content)} characters)"
 
 
 # Example usage

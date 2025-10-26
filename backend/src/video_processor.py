@@ -102,6 +102,7 @@ class VideoProcessor:
         workflow_name: str,
         workflow_description: str,
         output_json_path: Optional[str] = None,
+        screenshot_dir: Optional[str] = None,
     ) -> WorkflowInput:
         """
         Process a video and generate WorkflowInput.
@@ -112,6 +113,7 @@ class VideoProcessor:
             workflow_name: Name of the workflow
             workflow_description: Description of what the workflow does
             output_json_path: Optional path to save the JSON output
+            screenshot_dir: Optional directory to save extracted screenshots
 
         Returns:
             WorkflowInput object with detected actions
@@ -567,14 +569,14 @@ Analyze the frames now and provide the workflow metadata and all significant use
 
             # Save screenshot for this action if available
             screenshot_path = None
-            if frames:
+            if frames and screenshot_dir:
                 # Find closest frame to this timestamp
                 target_ms = seconds * 1000
                 closest_frame = min(frames, key=lambda f: abs(f.timestamp_ms - target_ms))
-                screenshot_dir = Path("screenshots")
-                screenshot_dir.mkdir(exist_ok=True)
+                screenshot_path_obj = Path(screenshot_dir)
+                screenshot_path_obj.mkdir(parents=True, exist_ok=True)
                 screenshot_path = str(
-                    screenshot_dir / f"action_{idx + 1}_frame_{closest_frame.frame_number}.png"
+                    screenshot_path_obj / f"action_{idx + 1}_frame_{closest_frame.frame_number}.png"
                 )
                 with open(screenshot_path, "wb") as f:
                     f.write(closest_frame.image)

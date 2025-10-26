@@ -14,9 +14,25 @@ class ProcessVideoRequest(BaseModel):
     workflow_name: Optional[str] = None
     workflow_description: Optional[str] = None
 
+@router.get("")
+async def get_all_sessions():
+    """Get all sessions (for sidebar)"""
+    sessions = session_manager.get_all_sessions()
+    return {
+        "sessions": [
+            {
+                "id": s.id,
+                "status": s.status,
+                "workflowActions": len(s.workflow.actions) if s.workflow else 0,
+                "createdAt": s.created_at.isoformat(),
+            }
+            for s in sessions
+        ]
+    }
+
 @router.get("/{session_id}")
 async def get_session(session_id: str):
-    """Get session information"""
+    """Get session details"""
     session = session_manager.get_session(session_id)
     
     if not session:
@@ -29,6 +45,19 @@ async def get_session(session_id: str):
         "workflowActions": len(session.workflow.actions) if session.workflow else 0,
         "scriptPath": session.script_path,
         "createdAt": session.created_at.isoformat()
+    }
+
+@router.get("/{session_id}/events")
+async def get_session_events(session_id: str):
+    """Get session event history"""
+    session = session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return {
+        "sessionId": session.id,
+        "events": [e.model_dump() for e in session.events]
     }
 
 @router.get("/{session_id}/workflow")

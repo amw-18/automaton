@@ -2,7 +2,7 @@
 
 import { type Client, formDataBodySerializer, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetScreenshotApiScreenshotsSessionIdFilenameGetData, GetScreenshotApiScreenshotsSessionIdFilenameGetErrors, GetScreenshotApiScreenshotsSessionIdFilenameGetResponses, GetScriptApiScriptsSessionIdTestPyGetData, GetScriptApiScriptsSessionIdTestPyGetErrors, GetScriptApiScriptsSessionIdTestPyGetResponses, GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetStatsApiSessionsStatsGetData, GetStatsApiSessionsStatsGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ManualCleanupApiSessionsCleanupPostData, ManualCleanupApiSessionsCleanupPostResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, StartAgentApiSessionsSessionIdStartPostData, StartAgentApiSessionsSessionIdStartPostErrors, StartAgentApiSessionsSessionIdStartPostResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
+import type { GetAllSessionsApiSessionsGetData, GetAllSessionsApiSessionsGetResponses, GetScreenshotApiScreenshotsSessionIdFilenameGetData, GetScreenshotApiScreenshotsSessionIdFilenameGetErrors, GetScreenshotApiScreenshotsSessionIdFilenameGetResponses, GetScriptApiScriptsSessionIdTestPyGetData, GetScriptApiScriptsSessionIdTestPyGetErrors, GetScriptApiScriptsSessionIdTestPyGetResponses, GetSessionApiSessionsSessionIdGetData, GetSessionApiSessionsSessionIdGetErrors, GetSessionApiSessionsSessionIdGetResponses, GetSessionEventsApiSessionsSessionIdEventsGetData, GetSessionEventsApiSessionsSessionIdEventsGetErrors, GetSessionEventsApiSessionsSessionIdEventsGetResponses, GetStatsApiSessionsStatsGetData, GetStatsApiSessionsStatsGetResponses, GetWorkflowApiSessionsSessionIdWorkflowGetData, GetWorkflowApiSessionsSessionIdWorkflowGetErrors, GetWorkflowApiSessionsSessionIdWorkflowGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, ManualCleanupApiSessionsCleanupPostData, ManualCleanupApiSessionsCleanupPostResponses, ProcessVideoApiSessionsSessionIdProcessPostData, ProcessVideoApiSessionsSessionIdProcessPostErrors, ProcessVideoApiSessionsSessionIdProcessPostResponses, RootGetData, RootGetResponses, StartAgentApiSessionsSessionIdStartPostData, StartAgentApiSessionsSessionIdStartPostErrors, StartAgentApiSessionsSessionIdStartPostResponses, UploadVideoApiVideosUploadPostData, UploadVideoApiVideosUploadPostErrors, UploadVideoApiVideosUploadPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -36,13 +36,37 @@ export const uploadVideoApiVideosUploadPost = <ThrowOnError extends boolean = fa
 };
 
 /**
+ * Get All Sessions
+ *
+ * Get all sessions (for sidebar)
+ */
+export const getAllSessionsApiSessionsGet = <ThrowOnError extends boolean = false>(options?: Options<GetAllSessionsApiSessionsGetData, ThrowOnError>) => {
+    return (options?.client ?? client).get<GetAllSessionsApiSessionsGetResponses, unknown, ThrowOnError>({
+        url: '/api/sessions',
+        ...options
+    });
+};
+
+/**
  * Get Session
  *
- * Get session information
+ * Get session details
  */
 export const getSessionApiSessionsSessionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetSessionApiSessionsSessionIdGetData, ThrowOnError>) => {
     return (options.client ?? client).get<GetSessionApiSessionsSessionIdGetResponses, GetSessionApiSessionsSessionIdGetErrors, ThrowOnError>({
         url: '/api/sessions/{session_id}',
+        ...options
+    });
+};
+
+/**
+ * Get Session Events
+ *
+ * Get session event history
+ */
+export const getSessionEventsApiSessionsSessionIdEventsGet = <ThrowOnError extends boolean = false>(options: Options<GetSessionEventsApiSessionsSessionIdEventsGetData, ThrowOnError>) => {
+    return (options.client ?? client).get<GetSessionEventsApiSessionsSessionIdEventsGetResponses, GetSessionEventsApiSessionsSessionIdEventsGetErrors, ThrowOnError>({
+        url: '/api/sessions/{session_id}/events',
         ...options
     });
 };

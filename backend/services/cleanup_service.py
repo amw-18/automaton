@@ -25,7 +25,7 @@ class CleanupService:
                 sessions_to_delete.append(session_id)
         
         for session_id in sessions_to_delete:
-            # Delete files
+            # Delete uploaded files (videos, screenshots, scripts)
             session_dir = self.uploads_dir / session_id
             if session_dir.exists():
                 try:
@@ -33,6 +33,15 @@ class CleanupService:
                     print(f"  ✓ Deleted session files: {session_id}")
                 except Exception as e:
                     print(f"  ✗ Error deleting {session_id}: {e}")
+            
+            # Delete session JSON file
+            session_file = Path("sessions") / f"{session_id}.json"
+            if session_file.exists():
+                try:
+                    session_file.unlink()
+                    print(f"  ✓ Deleted session record: {session_id}")
+                except Exception as e:
+                    print(f"  ✗ Error deleting session record: {e}")
             
             # Remove from memory
             session_manager.sessions.pop(session_id, None)

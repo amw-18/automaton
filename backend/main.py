@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import asyncio
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # Import routers
@@ -10,7 +11,17 @@ from services.cleanup_service import cleanup_service
 
 load_dotenv()
 
-app = FastAPI(title="Automaton API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
+    asyncio.create_task(cleanup_service.start_periodic_cleanup(interval_minutes=30))
+    print("✅ Background tasks started")
+    yield
+    # Shutdown (if needed)
+    print("👋 Shutting down...")
+
+app = FastAPI(title="Automaton API", version="1.0.0", lifespan=lifespan)
 
 # CORS configuration for local development
 app.add_middleware(
@@ -35,19 +46,13 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-@app.on_event("startup")
-async def startup_event():
-    """Start background tasks on startup"""
-    # Start periodic cleanup (every 30 minutes)
-    asyncio.create_task(cleanup_service.start_periodic_cleanup(interval_minutes=30))
-    print("✅ Background tasks started")
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        app, 
+        "main:app",  # Import string instead of app object
         host="0.0.0.0", 
         port=8000,
         reload=True,
-        reload_excludes=["uploads/*", "*.log", "*.jsonl", "screenshots/*"]
+        reload_includes=["*.py"],  # Only reload on Python file changes
+        reload_excludes=["uploads/**", "sessions/**", "screenshots/**", "*.log", "*.jsonl", "*.json"]
     )

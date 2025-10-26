@@ -83,6 +83,20 @@ export type UploadVideoApiVideosUploadPostResponses = {
     200: unknown;
 };
 
+export type GetAllSessionsApiSessionsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sessions';
+};
+
+export type GetAllSessionsApiSessionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetSessionApiSessionsSessionIdGetData = {
     body?: never;
     path: {
@@ -105,6 +119,34 @@ export type GetSessionApiSessionsSessionIdGetErrors = {
 export type GetSessionApiSessionsSessionIdGetError = GetSessionApiSessionsSessionIdGetErrors[keyof GetSessionApiSessionsSessionIdGetErrors];
 
 export type GetSessionApiSessionsSessionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type GetSessionEventsApiSessionsSessionIdEventsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/sessions/{session_id}/events';
+};
+
+export type GetSessionEventsApiSessionsSessionIdEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSessionEventsApiSessionsSessionIdEventsGetError = GetSessionEventsApiSessionsSessionIdEventsGetErrors[keyof GetSessionEventsApiSessionsSessionIdEventsGetErrors];
+
+export type GetSessionEventsApiSessionsSessionIdEventsGetResponses = {
     /**
      * Successful Response
      */

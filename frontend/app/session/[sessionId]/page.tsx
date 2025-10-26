@@ -7,6 +7,8 @@ import { useWebSocket, WebSocketMessage } from '@/lib/useWebSocket';
 import ScreenshotStream from '@/components/ScreenshotStream';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import StatusBadge from '@/components/StatusBadge';
+import DebugModal from '@/components/DebugModal';
+import SessionsSidebar from '@/components/SessionsSidebar';
 
 interface Session {
   sessionId: string;
@@ -33,6 +35,7 @@ export default function SessionPage() {
   const [running, setRunning] = useState(false);
   const [showProcessForm, setShowProcessForm] = useState(false);
   const [showArtifact, setShowArtifact] = useState(false);
+  const [showDebugModal, setShowDebugModal] = useState(false);
   const [workflowJson, setWorkflowJson] = useState<any>(null);
   const [screenshots, setScreenshots] = useState<Screenshot[]>([]);
   const [formData, setFormData] = useState({
@@ -203,22 +206,32 @@ export default function SessionPage() {
   const isProcessed = session?.status === 'processed';
 
   return (
-    <main className={showArtifact ? "h-screen flex" : "min-h-screen p-8 md:p-24"}>
-      <div className={showArtifact ? "w-1/2 overflow-y-auto p-8 md:p-24" : "max-w-4xl mx-auto"}>
-        <div className="mb-8">
-          <a href="/" className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1">
-            ← Back to Home
-          </a>
-          <h1 className="text-3xl font-bold mt-2">Session</h1>
-          <p className="text-sm text-gray-500 font-mono">{sessionId}</p>
-        </div>
+    <div className="flex h-screen">
+      {/* Sessions Sidebar */}
+      <SessionsSidebar />
+      
+      {/* Main Content */}
+      <main className={showArtifact ? "flex-1 flex overflow-hidden" : "flex-1 overflow-y-auto"}>
+        <div className={showArtifact ? "w-1/2 overflow-y-auto p-8 md:p-24" : "max-w-4xl mx-auto p-8 md:p-24"}>
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold">Session</h1>
+            <p className="text-sm text-gray-500 font-mono">{sessionId}</p>
+          </div>
         
-        {/* Connection Status */}
-        <div className="mb-6 flex items-center gap-2">
-          <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span className="text-sm text-gray-600">
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </span>
+        {/* Connection Status & Debug Button */}
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span className="text-sm text-gray-600">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowDebugModal(true)}
+            className="text-sm text-gray-600 hover:text-gray-800 px-3 py-1 rounded border border-gray-300 hover:border-gray-400 transition-colors"
+          >
+            🐛 Debug Log ({messages.length})
+          </button>
         </div>
         
         {/* Session Details */}
@@ -411,56 +424,36 @@ export default function SessionPage() {
           </div>
         )}
 
-        {/* WebSocket Messages Log */}
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Activity Log</h2>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {messages.length === 0 ? (
-              <p className="text-gray-500 text-sm">No activity yet...</p>
-            ) : (
-              messages.map((msg, idx) => (
-                <div key={idx} className="text-sm border-l-2 border-blue-500 pl-3 py-1">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">{msg.type}</span>
-                      {msg.status && <span className="text-gray-600"> - {msg.status}</span>}
-                      {msg.log?.message && (
-                        <div className="text-gray-500 text-xs mt-1">{msg.log.message}</div>
-                      )}
-                    </div>
-                    {msg.timestamp && (
-                      <span className="text-xs text-gray-400">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </div>
-      </div>
 
-      {/* Full-height Workflow Artifact Viewer */}
-      {showArtifact && (
-        <div className="w-1/2 h-screen overflow-y-auto bg-gray-900 text-gray-100 p-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold">Workflow Artifact</h2>
-            <button
-              onClick={() => setShowArtifact(false)}
-              className="text-gray-400 hover:text-white text-3xl leading-none font-light"
-              title="Close artifact view"
-            >
-              ×
-            </button>
+        {/* Full-height Workflow Artifact Viewer */}
+        {showArtifact && (
+          <div className="w-1/2 h-screen overflow-y-auto bg-gray-900 text-gray-100 p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-semibold">Workflow Artifact</h2>
+              <button
+                onClick={() => setShowArtifact(false)}
+                className="text-gray-400 hover:text-white text-3xl leading-none font-light"
+                title="Close artifact view"
+              >
+                ×
+              </button>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-6 overflow-auto">
+              <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap break-words">
+                {workflowJson ? JSON.stringify(workflowJson, null, 2) : 'Loading...'}
+              </pre>
+            </div>
           </div>
-          <div className="bg-gray-800 rounded-lg p-6 overflow-auto">
-            <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap break-words">
-              {workflowJson ? JSON.stringify(workflowJson, null, 2) : 'Loading...'}
-            </pre>
-          </div>
-        </div>
-      )}
-    </main>
+        )}
+      </main>
+
+      {/* Debug Modal */}
+      <DebugModal 
+        isOpen={showDebugModal}
+        onClose={() => setShowDebugModal(false)}
+        messages={messages}
+      />
+    </div>
   );
 }
