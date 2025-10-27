@@ -10,6 +10,9 @@ export default function StatusBadge({ status }: StatusBadgeProps) {
     processed: { label: 'Ready', className: 'bg-green-100 text-green-800' },
     running: { label: 'Running', className: 'bg-purple-100 text-purple-800' },
     complete: { label: 'Complete', className: 'bg-green-100 text-green-800' },
+    testing: { label: 'Testing', className: 'bg-orange-100 text-orange-800' },
+    test_complete: { label: 'Test Complete', className: 'bg-green-100 text-green-800' },
+    test_failed: { label: 'Test Failed', className: 'bg-red-100 text-red-800' },
     error: { label: 'Error', className: 'bg-red-100 text-red-800' },
   };
 

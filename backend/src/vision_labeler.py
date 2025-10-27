@@ -79,6 +79,10 @@ class VisionLabeler:
             self.screenshot_counter += 1
             output_path = f"screenshots/labeled_{self.screenshot_counter}.png"
         
+        # Ensure parent directory exists
+        from pathlib import Path
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        
         # Always save the annotated screenshot
         with open(output_path, 'wb') as f:
             f.write(annotated_bytes)

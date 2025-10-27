@@ -23,9 +23,10 @@ class SessionEvent(BaseModel):
 class Session(BaseModel):
     id: str
     video_path: str
-    status: str  # created, uploaded, processing, processed, running, complete, error
+    status: str  # created, uploaded, processing, processed, running, complete, testing, test_complete, test_failed, error
     workflow: Optional[WorkflowInput] = None
     script_path: Optional[str] = None
+    test_video_path: Optional[str] = None  # Path to test execution video
     created_at: datetime = Field(default_factory=datetime.utcnow)
     events: List[SessionEvent] = Field(default_factory=list)
     
@@ -48,6 +49,7 @@ class Session(BaseModel):
             "status": self.status,
             "workflow": self.workflow.model_dump() if self.workflow else None,
             "script_path": self.script_path,
+            "test_video_path": self.test_video_path,
             "created_at": self.created_at.isoformat(),
             "events": [e.model_dump() for e in self.events]
         }
@@ -69,6 +71,7 @@ class Session(BaseModel):
             status=data["status"],
             workflow=workflow,
             script_path=data.get("script_path"),
+            test_video_path=data.get("test_video_path"),
             created_at=datetime.fromisoformat(data["created_at"]),
             events=events
         )

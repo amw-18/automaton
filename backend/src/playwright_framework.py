@@ -107,6 +107,7 @@ class PlaywrightToolkit:
         
         # Screenshot directory and callback
         self.screenshot_dir = screenshot_dir
+        self.screenshot_counter = 0
         self.screenshot_callback: Optional[Callable[[str], Any]] = None
         
         # Create screenshots directory if using vision
@@ -448,6 +449,10 @@ class PlaywrightToolkit:
         if not self.page:
             raise RuntimeError("Browser not initialized. Call initialize() first.")
         
+        # Ensure parent directory exists
+        from pathlib import Path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        
         if selector:
             element = await self.page.query_selector(selector)
             if element:
@@ -525,20 +530,15 @@ Key Elements Present:
         print(f"📸 Capturing labeled screenshot...")
         
         try:
-            # Capture and label
+            # Generate output path using the configured screenshot directory
+            self.screenshot_counter += 1
+            output_path = os.path.join(self.screenshot_dir, f"labeled_{self.screenshot_counter}.png")
+            
+            # Capture and label with explicit path
             screenshot_path, elements, image_bytes = await self.vision_labeler.capture_and_label_page(
                 self.page,
-                output_path=None  # Will auto-generate path
+                output_path=output_path
             )
-            
-            # Move screenshot to custom directory if needed
-            if self.screenshot_dir != "screenshots":
-                from pathlib import Path
-                import shutil
-                screenshot_filename = Path(screenshot_path).name
-                new_path = f"{self.screenshot_dir}/{screenshot_filename}"
-                shutil.move(screenshot_path, new_path)
-                screenshot_path = new_path
             
             print(f"📸 Screenshot saved to: {screenshot_path}")
             print(f"📸 Found {len(elements)} interactive elements")

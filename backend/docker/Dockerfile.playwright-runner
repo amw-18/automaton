@@ -1,0 +1,23 @@
+# Playwright Test Runner Docker Image
+# Minimal container for executing generated Playwright test scripts with video recording
+
+FROM mcr.microsoft.com/playwright/python:v1.48.0-jammy
+
+# Set working directory
+WORKDIR /test
+
+# Install Python dependencies
+RUN pip install --no-cache-dir playwright pytest-playwright
+
+# Ensure Playwright browsers are installed (should be in base image)
+RUN playwright install --with-deps chromium
+
+# Create directories for test artifacts
+RUN mkdir -p /test/videos /test/screenshots
+
+# Set environment variables for Playwright
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PYTHONUNBUFFERED=1
+
+# Default command (will be overridden)
+CMD ["python", "/test/test_script.py"]

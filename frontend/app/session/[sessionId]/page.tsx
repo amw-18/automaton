@@ -15,7 +15,9 @@ interface Session {
   status: string;
   videoPath: string;
   workflowActions: number;
+  workflow?: any;  // Workflow object (present after processing)
   scriptPath?: string;
+  testVideoPath?: string;
   createdAt: string;
 }
 
@@ -33,6 +35,7 @@ export default function SessionPage() {
   const [messages, setMessages] = useState<WebSocketMessage[]>([]);
   const [processing, setProcessing] = useState(false);
   const [running, setRunning] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [showProcessForm, setShowProcessForm] = useState(false);
   const [showArtifact, setShowArtifact] = useState(false);
   const [showDebugModal, setShowDebugModal] = useState(false);
@@ -88,6 +91,17 @@ export default function SessionPage() {
         
         if (newStatus === 'complete' || newStatus === 'error') {
           setRunning(false);
+        }
+        
+        // Handle test execution status
+        if (newStatus === 'testing') {
+          setTesting(true);
+        }
+        
+        if (newStatus === 'test_complete' || newStatus === 'test_failed') {
+          setTesting(false);
+          // Refetch session to get test video path
+          loadSession();
         }
       }
       
@@ -180,6 +194,26 @@ export default function SessionPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start agent');
       setRunning(false);
+    }
+  };
+
+  const handleTestScript = async () => {
+    try {
+      setTesting(true);
+      setError(null);
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/sessions/${sessionId}/test`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to start test execution');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start test execution');
+      setTesting(false);
     }
   };
 
@@ -384,13 +418,90 @@ export default function SessionPage() {
             <p className="text-blue-700 text-sm mb-3">
               Agent completed successfully. Your Playwright test script is ready.
             </p>
-            <a
-              href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/scripts/${sessionId}/test.py`}
-              download
-              className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-            >
-              📥 Download Test Script
-            </a>
+            <div className="flex gap-3">
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/scripts/${sessionId}/test.py`}
+                download
+                className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                📥 Download Test Script
+              </a>
+              <button
+                onClick={handleTestScript}
+                disabled={testing}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                {testing ? '🧪 Testing...' : '🧪 Test Script'}
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Test Execution Running */}
+        {testing && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <LoadingSpinner size="sm" />
+              <div>
+                <div className="font-medium text-green-800">Test Execution Running</div>
+                <div className="text-sm text-green-600">
+                  Running your test script in Docker container...
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Test Complete */}
+        {(session?.status === 'test_complete' || session?.status === 'test_failed') && (
+          <div className={`border rounded-lg p-6 mb-6 ${
+            session.status === 'test_complete' 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-red-50 border-red-200'
+          }`}>
+            <h3 className={`font-semibold mb-2 ${
+              session.status === 'test_complete' ? 'text-green-800' : 'text-red-800'
+            }`}>
+              {session.status === 'test_complete' ? '✅ Test Execution Complete!' : '❌ Test Execution Failed'}
+            </h3>
+            <p className={`text-sm mb-3 ${
+              session.status === 'test_complete' ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {session.status === 'test_complete' 
+                ? 'Your test script has been executed successfully. Watch the video recording below.'
+                : 'The test execution encountered an error. Watch the video below to see what happened.'
+              }
+            </p>
+            
+            {session.status === 'test_failed' && (
+              <button
+                onClick={handleTestScript}
+                disabled={testing}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors mb-4"
+              >
+                🔄 Retry Test Execution
+              </button>
+            )}
+            
+            {/* Show video for both success and failure */}
+            {session.testVideoPath && (
+              <div className="mt-4">
+                <h4 className={`font-medium mb-2 ${
+                  session.status === 'test_complete' ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  Test Execution Video:
+                </h4>
+                <video
+                  controls
+                  className={`w-full max-w-2xl rounded-lg border ${
+                    session.status === 'test_complete' ? 'border-green-300' : 'border-red-300'
+                  }`}
+                  src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/test-videos/${sessionId}/execution.webm`}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </div>
+            )}
           </div>
         )}
 
@@ -409,10 +520,50 @@ export default function SessionPage() {
           </div>
         )}
 
-        {/* Error Display */}
+        {/* Error Display with Retry Options */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-red-800 text-sm">{error}</p>
+            <p className="text-red-800 text-sm font-medium mb-2">Error: {error}</p>
+          </div>
+        )}
+        
+        {/* Error State - Show Retry Options */}
+        {session?.status === 'error' && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+            <h3 className="font-semibold text-red-800 mb-2">❌ Operation Failed</h3>
+            <p className="text-red-700 text-sm mb-4">
+              The last operation encountered an error. You can retry from where it failed.
+            </p>
+            
+            {/* Determine which step failed and show appropriate retry */}
+            {!session.workflow && (
+              <button
+                onClick={() => setShowProcessForm(true)}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                🔄 Retry Video Processing
+              </button>
+            )}
+            
+            {session.workflow && !session.scriptPath && (
+              <button
+                onClick={handleStartAgent}
+                disabled={running}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                🔄 Retry Agent Execution
+              </button>
+            )}
+            
+            {session.scriptPath && (
+              <button
+                onClick={handleTestScript}
+                disabled={testing}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                🔄 Retry Test Execution
+              </button>
+            )}
           </div>
         )}
 

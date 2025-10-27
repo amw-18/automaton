@@ -154,6 +154,7 @@ class VideoProcessor:
             actions=analysis_result.actions,
             video_metadata=video_metadata,
             frames=frames,
+            screenshot_dir=screenshot_dir,
         )
 
         # Step 5: Save to JSON if path provided
@@ -528,6 +529,7 @@ Analyze the frames now and provide the workflow metadata and all significant use
         actions: list[VisualWorkflowAction],
         video_metadata: dict[str, Any],
         frames: list[VideoFrame],
+        screenshot_dir: Optional[str] = None,
     ) -> WorkflowInput:
         """
         Generate WorkflowInput from detected actions.
@@ -539,6 +541,7 @@ Analyze the frames now and provide the workflow metadata and all significant use
             actions: Detected actions from Gemini
             video_metadata: Video metadata
             frames: Extracted video frames
+            screenshot_dir: Optional directory to save extracted screenshots
 
         Returns:
             WorkflowInput object

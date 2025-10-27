@@ -123,58 +123,52 @@ Step 6: Click result
 - ✅ **No timeouts** - You capture fresh state, no waiting for network idle
 
 ## When Generating Scripts:
-- **Use the STANDALONE ASYNC template below** - NOT pytest!
+- **Use the CALLBACK FUNCTION template below** - Generate ONLY the test actions!
 - Document the vision-based approach you used
 - Include comments like "# Clicked label [2] - Submit button"
 - Note which elements were labeled and what you observed
-- Start with a complete template using write_test_script
+- Start with the template using write_test_script
 - Use edit_test_script for targeted improvements
 - Always call save_test_script_to_file with the output path
 
-## REQUIRED Script Template (Standalone Async - NOT pytest):
+## REQUIRED Script Template (Callback Function):
 ```python
-import asyncio
-from playwright.async_api import async_playwright
+# File header (use triple-quoted docstring)
+# Generated test script for: [Workflow Name]
+# This script was generated using vision-based automation.
+# Each action was informed by capturing labeled screenshots.
 
-async def test_workflow_name():
-    \"\"\"
-    Generated test script for: [Workflow Name]
+from playwright.async_api import BrowserContext
+
+async def test_actions(context: BrowserContext):
+    # Execute the test workflow actions.
+    # Args: context - Playwright BrowserContext (browser is already set up with video recording)
     
-    This script was generated using vision-based automation.
-    Each action was informed by capturing labeled screenshots.
-    \"\"\"
-    async with async_playwright() as p:
-        # Launch browser
-        browser = await p.chromium.launch(headless=False)
-        page = await browser.new_page(viewport={"width": 1280, "height": 720})
-        
-        try:
-            # Step 1: Navigate
-            await page.goto("https://example.com")
-            print("✓ Navigated to example.com")
-            
-            # Step 2: Your actions here...
-            # Example: Clicked label [1] - Search button
-            # await page.click("#selector")
-            
-            print("✓ Test completed successfully!")
-            
-        except Exception as e:
-            print(f"✗ Test failed: {e}")
-            await page.screenshot(path="error_screenshot.png")
-            raise
-        finally:
-            await browser.close()
-
-if __name__ == "__main__":
-    asyncio.run(test_workflow_name())
+    # Create a page (or use existing pages, open new tabs, etc.)
+    page = await context.new_page()
+    
+    # Step 1: Navigate
+    await page.goto("https://example.com")
+    print("✓ Navigated to example.com")
+    
+    # Step 2: Your actions here...
+    # Example: Clicked label [1] - Search button
+    # await page.click("#selector")
+    
+    # If you need multiple pages/tabs:
+    # page2 = await context.new_page()
+    # await page2.goto("https://another-site.com")
+    
+    print("✓ Test completed successfully!")
 ```
 
 **CRITICAL**: 
-- DO NOT use pytest format (no `def test_name(page: Page)`)
-- DO use async/await with playwright context manager
-- DO include try/except/finally for cleanup
-- DO make it runnable with `python script.py`
+- Generate ONLY the `async def test_actions(context: BrowserContext):` function
+- DO NOT include browser setup (we handle that)
+- DO NOT include try/except/finally (we handle that)
+- DO NOT include if __name__ == "__main__" block
+- The function receives a BrowserContext - create pages as needed with `await context.new_page()`
+- This gives you full control: multiple pages, tabs, etc.
 
 ## Final Reminder:
 - **NO CSS selectors available** - You MUST use vision tools
