@@ -6,6 +6,7 @@ WorkflowInput JSON using Gemini's vision capabilities to detect user actions.
 """
 
 import base64
+import json
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -394,6 +395,10 @@ class VideoProcessor:
 
     def _build_analysis_prompt(self, starting_url: str, num_frames: int) -> str:
         """Build the prompt for Gemini video analysis."""
+        # Generate schema from Pydantic models
+        video_analysis_schema = VideoAnalysisResult.model_json_schema()
+        schema_json = json.dumps(video_analysis_schema, indent=2)
+        
         return f"""You are analyzing a screen recording video of a user interacting with a website.
 The video starts at: {starting_url}
 
@@ -401,46 +406,29 @@ I'm providing you with {num_frames} key frames from this video in chronological 
 
 ## Your Task:
 
-1. **Understand the workflow** - What is the user trying to accomplish?
-2. **Identify user actions** - Analyze frames to detect specific user interactions
+Analyze the video frames to identify the user's workflow and extract all significant actions.
 
-## First, provide workflow metadata:
-- **workflow_name**: A short, descriptive name for this workflow (e.g., "Login flow", "Checkout process", "Search and filter")
-- **workflow_description**: A brief 1-2 sentence description of what the user accomplishes in this workflow
+## Output Schema:
 
-## Then, identify all user actions:
+Return a JSON object that follows this exact schema:
 
-### Action Types to Detect:
-- **click**: Mouse clicks on buttons, links, navigation items
-- **type**: Text input into form fields
-- **navigate**: Page navigation (URL changes, new pages loading)
-- **scroll**: Scrolling up/down the page
-- **select**: Dropdown or option selections
-- **hover**: Hover effects (if clearly visible)
-- **wait**: Explicit waiting for content to load
-
-### For Each Action Provide:
-
-1. **action_type**: One of the types above
-2. **description**: Clear, concise description of what the user did
-3. **element_description**: Description of the UI element (e.g., "Blue Submit button at bottom", "Email input field")
-4. **input_text**: (ONLY for 'type' actions) The text that was entered
-5. **target_url**: (ONLY for 'navigate' actions) The new URL
-6. **scroll_direction**: (ONLY for 'scroll' actions) Either "up" or "down"
-7. **expected_outcome**: What should happen after this action (optional but recommended)
-
-**Note:** Do NOT include timestamps - those will be calculated automatically.
+```json
+{schema_json}
+```
 
 ## Guidelines:
 
-- Focus on **significant actions** - ignore minor mouse movements or purely visual changes
-- Be **precise** about action types
-- Describe elements **clearly** for future automation (describe what you see, not CSS selectors)
-- Look for visual cues: button states, form changes, page transitions
+- Focus on significant actions that accomplish the user's goal
+- Ignore minor mouse movements and visual-only changes
+- Describe UI elements clearly for automation purposes
+- Look for visual cues like button states, form changes, page transitions
 - Infer text input from visible form field changes
 - Order actions chronologically based on the frame sequence
+- Be precise about action types
+- Only include fields that are relevant to each action type
+- Use null for optional fields that don't apply
 
-Analyze the frames now and provide the workflow metadata and all significant user actions."""
+Analyze the frames now and provide the workflow metadata and all detected actions according to the schema above."""
 
     def _parse_gemini_response(
         self, response_text: str, frames: list[VideoFrame]
@@ -555,11 +543,10 @@ Analyze the frames now and provide the workflow metadata and all significant use
             viewport=Viewport(width=video_metadata["width"], height=video_metadata["height"]),
         )
 
-        # Convert VisualWorkflowAction to WorkflowAction with timestamps
+        # Convert VisualWorkflowAction to WorkflowAction
         workflow_actions = []
-        base_time = datetime.now()
         
-        # Calculate timestamp spacing based on video duration and action count
+        # Calculate spacing for screenshot selection based on video duration and action count
         video_duration_sec = video_metadata.get("duration_sec", len(actions) * 3)
         if len(actions) > 1:
             time_per_action = video_duration_sec / len(actions)
@@ -584,7 +571,7 @@ Analyze the frames now and provide the workflow metadata and all significant use
                 with open(screenshot_path, "wb") as f:
                     f.write(closest_frame.image)
 
-            # Create WorkflowAction from VisualWorkflowAction (without timestamp)
+            # Create WorkflowAction from VisualWorkflowAction
             workflow_action = WorkflowAction(
                 action_type=visual_action.action_type,
                 description=visual_action.description,
@@ -592,8 +579,6 @@ Analyze the frames now and provide the workflow metadata and all significant use
                 target_url=visual_action.target_url,
                 input_text=visual_action.input_text,
                 expected_outcome=visual_action.expected_outcome,
-                dom_element=None,  # Not available from video
-                scroll_position=None,  # Could be enhanced later
             )
 
             workflow_actions.append(workflow_action)

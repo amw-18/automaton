@@ -20,7 +20,9 @@ class DOMElement(BaseModel):
     attributes: Optional[dict[str, str]] = Field(
         None, description="Element attributes (id, class, etc.)"
     )
-    bounding_box: Optional[dict[str, float]] = Field(None, description="{x, y, width, height}")
+    bounding_box: Optional[dict[str, float]] = Field(
+        None, description="{x, y, width, height}"
+    )
 
     model_config = {"extra": "forbid"}
 
@@ -35,24 +37,29 @@ class ScrollPosition(BaseModel):
 class VisualWorkflowAction(BaseModel):
     """
     A workflow action detected from video analysis (visual only, no DOM data).
-    Used by the video processor - timestamps are generated automatically.
+    Used by the video processor.
     """
 
-    action_type: Literal["click", "type", "navigate", "scroll", "select", "hover", "wait"] = Field(
-        ..., description="Type of action performed"
-    )
+    action_type: Literal[
+        "click", "type", "navigate", "scroll", "select", "hover", "wait"
+    ] = Field(..., description="Type of action performed")
     description: str = Field(..., description="Clear description of what the user did")
 
     # Action-specific details
-    target_url: Optional[str] = Field(None, description="For navigation actions - the new URL")
-    input_text: Optional[str] = Field(None, description="For typing actions - the text entered")
+    target_url: Optional[str] = Field(
+        None, description="For navigation actions - the new URL"
+    )
+    input_text: Optional[str] = Field(
+        None, description="For typing actions - the text entered"
+    )
     scroll_direction: Optional[Literal["up", "down"]] = Field(
         None, description="For scroll actions - direction"
     )
 
     # Visual context
     element_description: Optional[str] = Field(
-        None, description="Description of the UI element (e.g., 'Blue Submit button', 'Email field')"
+        None,
+        description="Description of the UI element (e.g., 'Blue Submit button', 'Email field')",
     )
     expected_outcome: Optional[str] = Field(
         None, description="What should happen after this action"
@@ -62,12 +69,11 @@ class VisualWorkflowAction(BaseModel):
 
 
 class WorkflowAction(BaseModel):
-    """A single action/step in the workflow (includes DOM and timestamp data)."""
+    """A single action/step in the workflow (includes DOM data)."""
 
-    timestamp: Optional[str] = Field(None, description="Relative to start of video... seconds into the video")
-    action_type: Literal["click", "type", "navigate", "scroll", "select", "hover", "wait"] = Field(
-        ..., description="Type of action performed"
-    )
+    action_type: Literal[
+        "click", "type", "navigate", "scroll", "select", "hover", "wait"
+    ] = Field(..., description="Type of action performed")
     description: str = Field(..., description="Human-readable description of the step")
     screenshot_url: Optional[str] = Field(
         None, description="URL or path to screenshot taken at this step"
@@ -76,34 +82,13 @@ class WorkflowAction(BaseModel):
     # Action-specific details
     target_url: Optional[str] = Field(None, description="For navigation actions")
     input_text: Optional[str] = Field(None, description="For typing actions")
-    scroll_position: Optional[ScrollPosition] = Field(
-        default=None, description="For scroll actions"
-    )
-
-    # Optional DOM details (not available from video analysis)
-    dom_element: Optional[DOMElement] = Field(None, description="DOM element details")
 
     # Validation/assertion expectations
     expected_outcome: Optional[str] = Field(
         None, description="What should happen after this action"
     )
-    wait_for: Optional[str] = Field(
-        default=None, description="What to wait for after action (selector, timeout)"
-    )
 
-    @field_validator("timestamp")
-    @classmethod
-    def validate_timestamp(cls, v: Optional[str]) -> Optional[str]:
-        """Validate ISO 8601 timestamp format."""
-        if v is None:
-            return v
-        try:
-            datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except ValueError:
-            raise ValueError(f"Invalid ISO 8601 timestamp: {v}")
-        return v
-
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "ignore"}
 
 
 class Viewport(BaseModel):
@@ -117,10 +102,12 @@ class WorkflowMetadata(BaseModel):
     """Metadata about the workflow recording."""
 
     name: str = Field(..., description="Name/title of the workflow")
-    description: str = Field(..., description="Overall description of what the workflow tests")
+    description: str = Field(
+        ..., description="Overall description of what the workflow tests"
+    )
     created_at: str = Field(..., description="ISO 8601 timestamp")
-    browser: Literal["chromium", "firefox", "webkit", "chrome", "safari", "edge"] = Field(
-        ..., description="Browser used"
+    browser: Literal["chromium", "firefox", "webkit", "chrome", "safari", "edge"] = (
+        Field(..., description="Browser used")
     )
     viewport: Viewport = Field(..., description="Browser viewport dimensions")
 
@@ -147,7 +134,9 @@ class WorkflowInput(BaseModel):
     actions: list[WorkflowAction] = Field(
         ..., min_length=1, description="Ordered list of actions in the flow"
     )
-    expected_final_state: Optional[str] = Field(None, description="Expected state at completion")
+    expected_final_state: Optional[str] = Field(
+        None, description="Expected state at completion"
+    )
 
     model_config = {"extra": "forbid"}
 
@@ -164,50 +153,24 @@ EXAMPLE_WORKFLOW = {
     "starting_url": "https://example.com",
     "actions": [
         {
-            "timestamp": "2025-10-10T22:38:05+05:30",
             "action_type": "click",
             "description": "Click on 'Sign In' button",
-            "dom_element": {
-                "selector": "button.sign-in",
-                "tag_name": "button",
-                "text_content": "Sign In",
-                "attributes": {"class": "sign-in btn-primary", "id": "signin-btn"},
-            },
             "expected_outcome": "Login modal appears",
         },
         {
-            "timestamp": "2025-10-10T22:38:07+05:30",
             "action_type": "type",
             "description": "Enter username in email field",
             "input_text": "user@example.com",
-            "dom_element": {
-                "selector": "input[name='email']",
-                "tag_name": "input",
-                "attributes": {"type": "email", "name": "email", "placeholder": "Email"},
-            },
         },
         {
-            "timestamp": "2025-10-10T22:38:10+05:30",
             "action_type": "type",
             "description": "Enter password",
             "input_text": "********",  # Actual password should be securely handled
-            "dom_element": {
-                "selector": "input[name='password']",
-                "tag_name": "input",
-                "attributes": {"type": "password", "name": "password"},
-            },
         },
         {
-            "timestamp": "2025-10-10T22:38:12+05:30",
             "action_type": "click",
             "description": "Click submit button",
-            "dom_element": {
-                "selector": "button[type='submit']",
-                "tag_name": "button",
-                "text_content": "Log In",
-            },
             "expected_outcome": "User is redirected to dashboard",
-            "wait_for": "nav.user-menu",
         },
     ],
     "expected_final_state": "User is logged in and dashboard is visible",

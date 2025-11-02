@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 
 interface Screenshot {
   url: string;
-  timestamp: string;
 }
 
 interface ScreenshotStreamProps {
@@ -53,9 +52,6 @@ export default function ScreenshotStream({ screenshots }: ScreenshotStreamProps)
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="bg-gray-800 text-white px-4 py-2 text-sm flex items-center justify-between">
           <span>Screenshot {validIndex + 1} of {screenshots.length}</span>
-          <span className="text-xs text-gray-400">
-            {new Date(selectedScreenshot.timestamp).toLocaleTimeString()}
-          </span>
         </div>
         <div className="relative w-full" style={{ minHeight: '400px' }}>
           <img

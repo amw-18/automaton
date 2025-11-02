@@ -23,7 +23,6 @@ interface Session {
 
 interface Screenshot {
   url: string;
-  timestamp: string;
 }
 
 export default function SessionPage() {
@@ -111,8 +110,7 @@ export default function SessionPage() {
         setScreenshots(prev => [
           ...prev,
           {
-            url: `${apiUrl}${lastMessage.imageUrl}`,
-            timestamp: lastMessage.timestamp || new Date().toISOString()
+            url: `${apiUrl}${lastMessage.imageUrl}`
           }
         ]);
       }

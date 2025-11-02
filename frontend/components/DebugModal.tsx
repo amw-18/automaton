@@ -66,11 +66,6 @@ export default function DebugModal({ isOpen, onClose, messages }: DebugModalProp
                         </div>
                       )}
                     </div>
-                    {msg.timestamp && (
-                      <span className="text-xs text-gray-400 ml-4">
-                        {new Date(msg.timestamp).toLocaleTimeString()}
-                      </span>
-                    )}
                   </div>
                 </div>
               ))
