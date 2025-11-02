@@ -38,21 +38,11 @@ class VideoAnalysisResult(BaseModel):
     workflow_description: Optional[str] = Field(None, description="Brief description of what the workflow does")
 
 
-class VideoFrame:
-    """Represents a single frame from the video."""
-
-    def __init__(self, frame_number: int, timestamp_ms: float, image: bytes):
-        self.frame_number: int = frame_number
-        self.timestamp_ms: float = timestamp_ms
-        self.image: bytes = image  # PNG bytes
-        self.base64_image: str = base64.b64encode(image).decode("utf-8")
-
-
 class VideoProcessor:
     """
     Processes screen recording videos to generate WorkflowInput.
 
-    Uses Gemini's multi-modal capabilities to analyze video frames and
+    Uses Gemini's multi-modal capabilities to analyze video files and
     detect user interactions (clicks, typing, navigation, etc.).
     """
 
@@ -61,8 +51,6 @@ class VideoProcessor:
         project_id: str = GCP_PROJECT_ID,
         location: str = GCP_LOCATION,
         model_name: str = "gemini-2.5-flash",
-        frame_sample_rate: int = 2,  # Extract 2 frames per second
-        min_frame_interval_ms: int = 500,  # Minimum 500ms between frames
     ):
         """
         Initialize the video processor.
@@ -71,14 +59,10 @@ class VideoProcessor:
             project_id: Google Cloud project ID
             location: GCP location (e.g., 'us-central1')
             model_name: Gemini model to use
-            frame_sample_rate: Frames to extract per second
-            min_frame_interval_ms: Minimum time between sampled frames
         """
         self.project_id = project_id
         self.location = location
         self.model_name = model_name
-        self.frame_sample_rate = frame_sample_rate
-        self.min_frame_interval_ms = min_frame_interval_ms
 
         # Initialize Gemini model
         self.llm = ChatVertexAI(
@@ -103,7 +87,6 @@ class VideoProcessor:
         workflow_name: str,
         workflow_description: str,
         output_json_path: Optional[str] = None,
-        screenshot_dir: Optional[str] = None,
     ) -> WorkflowInput:
         """
         Process a video and generate WorkflowInput.
@@ -114,21 +97,15 @@ class VideoProcessor:
             workflow_name: Name of the workflow
             workflow_description: Description of what the workflow does
             output_json_path: Optional path to save the JSON output
-            screenshot_dir: Optional directory to save extracted screenshots
 
         Returns:
             WorkflowInput object with detected actions
         """
         print(f"📹 Processing video: {video_path}")
 
-        # Step 1: Extract frames from video
-        print("🎬 Extracting frames...")
-        frames = await self._extract_frames(video_path)
-        print(f"✓ Extracted {len(frames)} frames")
-
-        # Step 2: Analyze frames with Gemini to detect actions and extract metadata
+        # Step 1: Analyze entire video with Gemini to detect actions and extract metadata
         print("🤖 Analyzing video with Gemini...")
-        analysis_result = await self._analyze_video_with_gemini(frames, starting_url)
+        analysis_result = await self._analyze_video_with_gemini(video_path, starting_url)
         print(f"✓ Detected {len(analysis_result.actions)} actions")
         
         # Use Gemini-extracted metadata if not provided by user
@@ -143,10 +120,10 @@ class VideoProcessor:
             final_workflow_description = analysis_result.workflow_description
             print(f"  ℹ️  Using AI-extracted description: {final_workflow_description}")
 
-        # Step 3: Get video metadata
+        # Step 2: Get video metadata
         video_metadata = await self._get_video_metadata(video_path)
 
-        # Step 4: Generate WorkflowInput
+        # Step 3: Generate WorkflowInput
         print("📝 Generating WorkflowInput...")
         workflow_input = self._generate_workflow_input(
             workflow_name=final_workflow_name,
@@ -154,8 +131,6 @@ class VideoProcessor:
             starting_url=starting_url,
             actions=analysis_result.actions,
             video_metadata=video_metadata,
-            frames=frames,
-            screenshot_dir=screenshot_dir,
         )
 
         # Step 5: Save to JSON if path provided
@@ -166,234 +141,7 @@ class VideoProcessor:
         print("✅ Video processing complete!")
         return workflow_input
 
-    async def _extract_frames(self, video_path: str) -> list[VideoFrame]:
-        """
-        Extract frames from video at specified sample rate.
-        Handles WebM and other formats with unreliable metadata.
-
-        Args:
-            video_path: Path to video file
-
-        Returns:
-            List of VideoFrame objects
-        """
-        if not os.path.exists(video_path):
-            raise FileNotFoundError(f"Video file not found: {video_path}")
-
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise ValueError(f"Failed to open video: {video_path}")
-
-        # Get metadata from OpenCV
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        # Validate metadata - WebM files often have invalid metadata
-        metadata_valid = (
-            fps > 0
-            and fps < 500  # Reasonable FPS range
-            and total_frames > 0
-            and total_frames < 1_000_000  # Reasonable frame count
-            and width > 0
-            and height > 0
-        )
-
-        if not metadata_valid:
-            print(
-                f"  ⚠️  Video metadata unreliable (FPS={fps:.2f}, frames={total_frames})"
-            )
-            print("  Counting frames manually (this may take a moment)...")
-
-            # Count frames manually and estimate FPS
-            actual_frame_count = 0
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
-            while True:
-                ret = cap.grab()  # Faster than read()
-                if not ret:
-                    break
-                actual_frame_count += 1
-
-            # Estimate FPS based on video format
-            # WebM screen recordings are typically 30 FPS
-            fps = 30.0
-            total_frames = actual_frame_count
-            print(f"  ✓ Counted {actual_frame_count} frames, assuming {fps:.0f} FPS")
-            
-            # Close and reopen video - WebM files don't seek reliably after grab()
-            cap.release()
-            cap = cv2.VideoCapture(video_path)
-            if not cap.isOpened():
-                raise ValueError(f"Failed to reopen video after counting frames")
-        else:
-            print(f"  Video: {fps:.2f} FPS, {total_frames} frames")
-
-        duration_sec = total_frames / fps if fps > 0 else 0
-        print(f"  Duration: {duration_sec:.2f}s, Resolution: {width}x{height}")
-
-        # Calculate frame interval
-        # For unreliable metadata, always use calculated timestamps
-        if not metadata_valid:
-            # For WebM with bad metadata, calculate timestamps from frame number
-            print(f"  Using calculated timestamps: {self.min_frame_interval_ms}ms intervals")
-            use_calculated_timestamps = True
-        elif fps > 100:
-            # Very high FPS, use time-based sampling
-            print(f"  Using time-based sampling: {self.min_frame_interval_ms}ms intervals")
-            use_calculated_timestamps = False
-        else:
-            # Normal video with good metadata
-            frame_interval = max(1, int(fps / self.frame_sample_rate))
-            print(f"  Sampling every {frame_interval} frames")
-            use_calculated_timestamps = False
-
-        frames: list[VideoFrame] = []
-        last_timestamp = -self.min_frame_interval_ms
-        frame_num = 0
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            # Calculate timestamp
-            if use_calculated_timestamps or metadata_valid is False:
-                # For bad metadata, always calculate from frame number
-                timestamp_ms = (frame_num / fps) * 1000
-            else:
-                # For good metadata, try to use actual position
-                timestamp_ms = cap.get(cv2.CAP_PROP_POS_MSEC)
-                if timestamp_ms == 0 and frame_num > 0:
-                    # Fallback to calculated if position is unreliable
-                    timestamp_ms = (frame_num / fps) * 1000
-
-            # Sample if enough time has passed
-            if timestamp_ms - last_timestamp >= self.min_frame_interval_ms:
-                # Convert frame to PNG bytes
-                is_success, buffer = cv2.imencode(".png", frame)
-                if is_success:
-                    png_bytes = buffer.tobytes()
-                    video_frame = VideoFrame(frame_num, timestamp_ms, png_bytes)
-                    frames.append(video_frame)
-                    last_timestamp = timestamp_ms
-
-            frame_num += 1
-
-        cap.release()
-
-        if not frames:
-            raise ValueError(
-                f"No frames extracted from video. Video may be corrupt or empty."
-            )
-
-        print(f"  ✓ Extracted {len(frames)} frames for analysis")
-        return frames
-
-    async def _analyze_video_with_gemini(
-        self, frames: list[VideoFrame], starting_url: str
-    ) -> VideoAnalysisResult:
-        """
-        Analyze video frames using Gemini to detect user actions and extract workflow metadata.
-        Uses structured output with Pydantic models for reliable JSON extraction.
-
-        Args:
-            frames: List of extracted video frames
-            starting_url: Starting URL of the workflow
-
-        Returns:
-            VideoAnalysisResult with actions, workflow_name, and workflow_description
-        """
-        # Prepare frames for Gemini (limit to avoid token limits)
-        # Use key frames: first, last, and evenly distributed middle frames
-        max_frames = 20  # Limit frames to avoid overwhelming the model
-        selected_frames = self._select_key_frames(frames, max_frames)
-
-        print(f"  Analyzing {len(selected_frames)} key frames...")
-
-        # Build the prompt for Gemini
-        prompt = self._build_analysis_prompt(starting_url, len(selected_frames))
-
-        # Create message with images
-        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
-
-        # Add frame images
-        for idx, frame in enumerate(selected_frames):
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{frame.base64_image}"},
-                }
-            )
-
-        message = HumanMessage(content=content)  # pyright: ignore[reportArgumentType]
-
-        # Call Gemini with structured output
-        print("  Calling Gemini with structured output...")
-        try:
-            result: VideoAnalysisResult = await self.llm_structured.ainvoke([message])
-            
-            if result.workflow_name:
-                print(f"  Workflow name: {result.workflow_name}")
-            if result.workflow_description:
-                print(f"  Workflow description: {result.workflow_description}")
-            
-            # Return full VideoAnalysisResult
-            return result
-        except Exception as e:
-            print(f"⚠️ Structured output failed: {e}")
-            print(f"  Error details: {str(e)}")
-            print("  Falling back to manual parsing...")
-            
-            # Fallback to unstructured call
-            response = await self.llm.ainvoke([message])
-            actions_dict = self._parse_gemini_response(response.content, selected_frames)
-            
-            # Convert dicts to VisualWorkflowAction objects
-            actions = []
-            for action_data in actions_dict:
-                try:
-                    action = VisualWorkflowAction(**action_data)
-                    actions.append(action)
-                except Exception as parse_error:
-                    print(f"⚠️ Failed to parse action: {parse_error}")
-                    continue
-            
-            # Return VideoAnalysisResult (without metadata in fallback mode)
-            return VideoAnalysisResult(actions=actions)
-
-    def _select_key_frames(self, frames: list[VideoFrame], max_frames: int) -> list[VideoFrame]:
-        """
-        Select key frames from the video for analysis.
-
-        Args:
-            frames: All extracted frames
-            max_frames: Maximum number of frames to select
-
-        Returns:
-            List of selected key frames
-        """
-        if len(frames) <= max_frames:
-            return frames
-
-        # Always include first and last frame
-        selected = [frames[0]]
-
-        # Select evenly distributed frames from the middle
-        middle_count = max_frames - 2
-        if middle_count > 0:
-            step = (len(frames) - 2) / middle_count
-            for i in range(middle_count):
-                idx = int(1 + i * step)
-                if idx < len(frames) - 1:
-                    selected.append(frames[idx])
-
-        # Add last frame
-        selected.append(frames[-1])
-
-        return selected
-
-    def _build_analysis_prompt(self, starting_url: str, num_frames: int) -> str:
+    def _build_analysis_prompt(self, starting_url: str) -> str:
         """Build the prompt for Gemini video analysis."""
         # Generate schema from Pydantic models
         video_analysis_schema = VideoAnalysisResult.model_json_schema()
@@ -402,11 +150,11 @@ class VideoProcessor:
         return f"""You are analyzing a screen recording video of a user interacting with a website.
 The video starts at: {starting_url}
 
-I'm providing you with {num_frames} key frames from this video in chronological order.
+I'm providing you with the complete video file for analysis.
 
 ## Your Task:
 
-Analyze the video frames to identify the user's workflow and extract all significant actions.
+Analyze the video to identify the user's workflow and extract all significant actions.
 
 ## Output Schema:
 
@@ -423,22 +171,21 @@ Return a JSON object that follows this exact schema:
 - Describe UI elements clearly for automation purposes
 - Look for visual cues like button states, form changes, page transitions
 - Infer text input from visible form field changes
-- Order actions chronologically based on the frame sequence
+- Order actions chronologically as they appear in the video
 - Be precise about action types
 - Only include fields that are relevant to each action type
 - Use null for optional fields that don't apply
 
-Analyze the frames now and provide the workflow metadata and all detected actions according to the schema above."""
+Analyze the video now and provide the workflow metadata and all detected actions according to the schema above."""
 
     def _parse_gemini_response(
-        self, response_text: str, frames: list[VideoFrame]
+        self, response_text: str
     ) -> list[dict[str, Any]]:
         """
         Parse Gemini's response to extract action data.
 
         Args:
             response_text: Raw response from Gemini
-            frames: The frames that were analyzed
 
         Returns:
             List of action dictionaries
@@ -467,6 +214,67 @@ Analyze the frames now and provide the workflow metadata and all detected action
             print(f"⚠️ Failed to parse JSON: {e}")
             print(f"JSON text: {json_text[:500]}")
             return []
+
+    async def _analyze_video_with_gemini(
+        self, video_path: str, starting_url: str
+    ) -> VideoAnalysisResult:
+        """
+        Analyze entire video using Gemini to detect user actions and extract workflow metadata.
+        Sends the complete video file instead of individual frames for cost efficiency.
+
+        Args:
+            video_path: Path to the video file
+            starting_url: Starting URL of the workflow
+
+        Returns:
+            VideoAnalysisResult with actions, workflow_name, and workflow_description
+        """
+        print(f"  Analyzing entire video file: {video_path}")
+
+        # Build the prompt for Gemini
+        prompt = self._build_analysis_prompt(starting_url)
+
+        # Read and encode the entire video file
+        with open(video_path, "rb") as video_file:
+            video_data = base64.b64encode(video_file.read()).decode("utf-8")
+
+        # Create message with video
+        content = [
+            {"type": "text", "text": prompt},
+            {
+                "type": "media",
+                "mime_type": "video/mp4",
+                "data": video_data,
+            },
+        ]
+
+        message = HumanMessage(content=content)  # pyright: ignore[reportArgumentType]
+
+        # Call Gemini with structured output
+        print("  Calling Gemini with structured output...")
+        try:
+            result: VideoAnalysisResult = await self.llm_structured.ainvoke([message])
+            
+            if result.workflow_name:
+                print(f"  Workflow name: {result.workflow_name}")
+            if result.workflow_description:
+                print(f"  Workflow description: {result.workflow_description}")
+            
+            # Return full VideoAnalysisResult
+            return result
+        except Exception as e:
+            print(f"⚠️ Structured output failed: {e}")
+            print(f"  Error details: {str(e)}")
+            print("  Falling back to manual parsing...")
+            
+            # Fallback to unstructured call
+            response = await self.llm.ainvoke([message])
+            actions_dict = self._parse_gemini_response(response.content)
+            return VideoAnalysisResult(
+                actions=[VisualWorkflowAction(**action) for action in actions_dict],
+                workflow_name=None,
+                workflow_description=None,
+            )
 
     async def _get_video_metadata(self, video_path: str) -> dict[str, Any]:
         """
@@ -516,8 +324,6 @@ Analyze the frames now and provide the workflow metadata and all detected action
         starting_url: str,
         actions: list[VisualWorkflowAction],
         video_metadata: dict[str, Any],
-        frames: list[VideoFrame],
-        screenshot_dir: Optional[str] = None,
     ) -> WorkflowInput:
         """
         Generate WorkflowInput from detected actions.
@@ -528,8 +334,6 @@ Analyze the frames now and provide the workflow metadata and all detected action
             starting_url: Starting URL
             actions: Detected actions from Gemini
             video_metadata: Video metadata
-            frames: Extracted video frames
-            screenshot_dir: Optional directory to save extracted screenshots
 
         Returns:
             WorkflowInput object
@@ -545,37 +349,12 @@ Analyze the frames now and provide the workflow metadata and all detected action
 
         # Convert VisualWorkflowAction to WorkflowAction
         workflow_actions = []
-        
-        # Calculate spacing for screenshot selection based on video duration and action count
-        video_duration_sec = video_metadata.get("duration_sec", len(actions) * 3)
-        if len(actions) > 1:
-            time_per_action = video_duration_sec / len(actions)
-        else:
-            time_per_action = video_duration_sec
 
         for idx, visual_action in enumerate(actions):
-            # Calculate time for screenshot selection
-            seconds = idx * time_per_action
-
-            # Save screenshot for this action if available
-            screenshot_path = None
-            if frames and screenshot_dir:
-                # Find closest frame to this timestamp
-                target_ms = seconds * 1000
-                closest_frame = min(frames, key=lambda f: abs(f.timestamp_ms - target_ms))
-                screenshot_path_obj = Path(screenshot_dir)
-                screenshot_path_obj.mkdir(parents=True, exist_ok=True)
-                screenshot_path = str(
-                    screenshot_path_obj / f"action_{idx + 1}_frame_{closest_frame.frame_number}.png"
-                )
-                with open(screenshot_path, "wb") as f:
-                    f.write(closest_frame.image)
-
-            # Create WorkflowAction from VisualWorkflowAction
+            # Create WorkflowAction from VisualWorkflowAction (without screenshots)
             workflow_action = WorkflowAction(
                 action_type=visual_action.action_type,
                 description=visual_action.description,
-                screenshot_url=screenshot_path,
                 target_url=visual_action.target_url,
                 input_text=visual_action.input_text,
                 expected_outcome=visual_action.expected_outcome,

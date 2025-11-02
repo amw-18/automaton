@@ -75,9 +75,6 @@ class WorkflowAction(BaseModel):
         "click", "type", "navigate", "scroll", "select", "hover", "wait"
     ] = Field(..., description="Type of action performed")
     description: str = Field(..., description="Human-readable description of the step")
-    screenshot_url: Optional[str] = Field(
-        None, description="URL or path to screenshot taken at this step"
-    )
 
     # Action-specific details
     target_url: Optional[str] = Field(None, description="For navigation actions")

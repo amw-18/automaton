@@ -55,10 +55,9 @@ class VideoService:
             print(f"   Description: {workflow_description}")
             
             # Save workflow JSON to session directory
-            session_dir = Path(session.video_path).parent
+            session_dir = Path(f"recordings/{session_id}")
+            session_dir.mkdir(parents=True, exist_ok=True)
             workflow_path = session_dir / "workflow.json"
-            processing_screenshots_dir = session_dir / "processing_screenshots"
-            processing_screenshots_dir.mkdir(exist_ok=True)
             
             # Process video with user-provided parameters
             workflow = await self.video_processor.process_video(
@@ -67,7 +66,6 @@ class VideoService:
                 workflow_name=workflow_name,
                 workflow_description=workflow_description,
                 output_json_path=str(workflow_path),
-                screenshot_dir=str(processing_screenshots_dir)
             )
             
             print(f"✅ Workflow saved to: {workflow_path}")
